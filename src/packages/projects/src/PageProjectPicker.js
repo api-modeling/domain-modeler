@@ -8,6 +8,12 @@ export class PageProjectPicker extends LitElement {
     return css`
     :host {
       display: block;
+      background-color: white;
+    }
+
+    .ws {
+      max-width: 900px;
+      margin: 0 auto;
     }
     `;
   }
@@ -41,11 +47,18 @@ export class PageProjectPicker extends LitElement {
     this.dispatchEvent(new CustomEvent('newprojectrequested'));
   }
 
+  _openImport() {
+    this.dispatchEvent(new CustomEvent('importrequested'));
+  }
+
   render() {
     const { compatibility } = this;
     return html`<welcome-screen
       recent
+      open
+      class="ws"
       @new="${this._startNew}"
+      @open="${this._openImport}"
       ?compatibility="${compatibility}"
     >
     </welcome-screen>`;

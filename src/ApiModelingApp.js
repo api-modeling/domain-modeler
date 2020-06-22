@@ -8,9 +8,19 @@ import '@anypoint-web-components/anypoint-button/anypoint-button.js';
 import '@api-modeling/modeling-editors-ui/editor-drawer.js';
 import '@api-modeling/modeling-editors-ui/module-details-view.js';
 import '@api-modeling/modeling-editors-ui/module-details-editor.js';
+import '@api-modeling/modeling-editors-ui/model-details-view.js';
+import '@api-modeling/modeling-editors-ui/model-details-editor.js';
+import '@anypoint-web-components/anypoint-styles/colors.js';
+import '@api-modeling/modeling-project-ui/domain-navigation.js';
+import '@api-modeling/modeling-project-ui/module-viewer.js';
+
 // pages
 import './packages/projects/page-project-picker.js';
-import './packages/domain/page-domain-explorer.js';
+import './packages/storage/page-import-screen.js';
+
+// helpers
+import './packages/storage/storage-prompt.js';
+import { DomainImporter } from './packages/storage/src/DomainImporter.js';
 
 /* global MetaStore */
 
@@ -18,6 +28,7 @@ import './packages/domain/page-domain-explorer.js';
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateModuleDeleteEvent} DomainStateModuleDeleteEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateModuleUpdateEvent} DomainStateModuleUpdateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateDataModelCreateEvent} DomainStateDataModelCreateEvent */
+/** @typedef {import('@anypoint-web-components/anypoint-input').AnypointInput} AnypointInput */
 
 const projectIdValue = Symbol('projectIdValue');
 const requestProject = Symbol('requestProject');
@@ -31,15 +42,49 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     return css`
     :host {
       height: 100%;
-      display: block;
+      display: flex;
+      flex-direction: column;
       --modeling-drawer-width: 320px;
       overflow: hidden;
       position: relative;
     }
 
+    h2 {
+      font-size: var(--theme-h2-font-size, 56px);
+      font-weight: var(--theme-h2-font-weight, 200);
+      color: var(--theme-h1-color, currentColor);
+    }
+
+    .title-line {
+      padding: 60px 0;
+      margin: 0;
+      text-align: center;
+    }
+
+    header {
+      height: 64px;
+      background-color: #D7D7D7;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+    }
+
+    .content {
+      display: flex;
+      flex-direction: row;
+      flex: 1;
+    }
+
+    nav {
+      background-color: #F7F7F7;
+      display: flex;
+      flex-direction: column;
+    }
+
     main {
-      height: 100%;
+      flex: 1;
       display: block;
+      background: #E5E5E5;
     }
 
     .page {
@@ -52,9 +97,17 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
     .project-name {
       margin: 0;
-      padding: 0 0 0 24px;
+      padding: 4px;
+      margin-left: 20px;
       font-size: 24px;
       font-weight: 400;
+      user-select: none;
+      cursor: text;
+      border: 1px transparent solid;
+    }
+
+    .project-name:hover {
+      border: 1px #9E9E9E solid;
     }
 
     .inner-editor-padding {
@@ -64,14 +117,27 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     .flex-last {
       margin-left: auto;
     }
+
+    .page-padding {
+      padding: 24px;
+    }
+
+    .name-editor {
+      display: flex;
+      align-items: center;
+    }
+
+    .full-page {
+      height: 100%;
+    }
     `;
   }
 
   static get properties() {
     return {
       compatibility: { type: Boolean },
+      route: { type: String },
       params: { type: Object },
-      query: { type: Object },
       /**
        * Loaded domain modeling project
        */
@@ -84,25 +150,11 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       module: { type: Object },
       renderNameDialog: { type: Boolean },
       moduleDetailsOpened: { type: Boolean },
+      moduleEditorOpened: { type: Boolean },
+      modelDetailsOpened: { type: Boolean },
+      modelEditorOpened: { type: Boolean },
+      projectNameEditor: { type: Boolean },
     };
-  }
-
-  static get routes() {
-    return [{
-      name: 'start',
-      pattern: '',
-      data: { title: 'Start' }
-    }, {
-      name: 'start',
-      pattern: 'start',
-      data: { title: 'Start' }
-    }, {
-      name: 'domain',
-      pattern: '/domain/:domain'
-    }, {
-      name: 'not-found',
-      pattern: '*'
-    }];
   }
 
   /**
@@ -125,6 +177,15 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this[requestProject](value);
   }
 
+  get projectName() {
+    const { project } = this;
+    let name = this._getValue(project, this.ns.aml.vocabularies.core.name);
+    if (!name) {
+      name = 'New project';
+    }
+    return String(name);
+  }
+
   constructor() {
     super();
     this.compatibility = false;
@@ -133,7 +194,10 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.query = {};
     this.renderNameDialog = false;
     this.moduleDetailsOpened = false;
-    this._clickHandler = this._clickHandler.bind(this);
+    this.moduleEditorOpened = false;
+    this.modelDetailsOpened = false;
+    this.modelEditorOpened = false;
+    this.projectNameEditor = false;
 
     this.store = new ModelingFrontStore();
 
@@ -149,7 +213,6 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
   connectedCallback() {
     super.connectedCallback();
-    this.addEventListener('click', this._clickHandler);
     this.addEventListener('navigate', this._navigateHandler);
     window.addEventListener(ModelingEventTypes.State.Navigation.change, this._navigationHandler);
     window.addEventListener(ModelingEventTypes.State.Navigation.action, this._modelingActionHandler);
@@ -188,6 +251,12 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.actionSelectedType = property;
     if (action === 'view' && property === 'module') {
       this.moduleDetailsOpened = true;
+    } else if (action === 'view' && property === 'data-model') {
+      this.modelDetailsOpened = true;
+    } else if (action === 'edit' && property === 'module') {
+      this.moduleEditorOpened = true;
+    } else if (action === 'edit' && property === 'data-model') {
+      this.modelEditorOpened = true;
     }
   }
 
@@ -299,37 +368,20 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.requestUpdate();
   }
 
-  _clickHandler(e) {
-    if (!e.composed) {
-      return;
-    }
-    const path = e.composedPath();
-    const anchor = path.find((node) => node.nodeName === 'A');
-    if (!anchor) {
-      return;
-    }
-    const href = anchor.getAttribute('href');
-    if (!href) {
-      return;
-    }
-    if (anchor.href.indexOf(window.location.host) !== 0) {
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    this.navigate(href);
-  }
-
   _newProjectRequestHandler() {
     this.renderNameDialog = true;
   }
 
+  _importProjectHandler() {
+    this.route = 'import';
+  }
+
   async _projectSaveHandler() {
-    const nameInput = this.shadowRoot.querySelector('[name="project-name"]');
+    const nameInput = /** @type AnypointInput */ (this.shadowRoot.querySelector('[name="project-name"]'));
     if (!nameInput.value) {
       return;
     }
-    const descInput = this.shadowRoot.querySelector('[name="project-description"]');
+    const descInput = /** @type AnypointInput */ (this.shadowRoot.querySelector('[name="project-description"]'));
     const info = {
       name: nameInput.value,
     };
@@ -359,14 +411,26 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this[prop] = false;
   }
 
-  _deleteSelectedHandler() {
-    this.moduleDetailsOpened = false;
+  async _deleteModuleHandler(e) {
+    if (this.actionSelectedType !== 'module') {
+      return;
+    }
+    this._closeDrawerHandler(e);
+    await this.store.removeModule(this.actionSelected);
   }
 
-  _editModuleHandler() {
-    this.moduleDetailsOpened = false;
-    this.moduleEditorOpened = true;
-    // ModelingEvents.State.Navigation.action(this, )
+  async _deleteModelHandler(e) {
+    if (this.actionSelectedType !== 'data-model') {
+      return;
+    }
+    this._closeDrawerHandler(e);
+    await this.store.removeDataModel(this.actionSelected);
+  }
+
+  _editSelectedHandler(e) {
+    const { property, editorProperty } = e.target.dataset;
+    this[property] = false;
+    this[editorProperty] = true;
   }
 
   async _saveModuleHandler(e) {
@@ -387,6 +451,58 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
     await ps;
     ModelingEvents.State.Module.updated(window, this.actionSelected);
+  }
+
+  async _saveModelHandler(e) {
+    if (this.actionSelectedType !== 'data-model') {
+      return;
+    }
+    const editor = e.target.previousElementSibling.previousElementSibling;
+    if (!editor.validate()) {
+      return;
+    }
+    this.modelEditorOpened = false;
+    const changes = editor.changelog();
+
+    if (!changes.length) {
+      return;
+    }
+    // @ts-ignore
+    const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
+    await ps;
+    ModelingEvents.State.Module.updated(window, this.actionSelected);
+  }
+
+  _projectDblclickHandler() {
+    this.projectNameEditor = true;
+  }
+
+  async _saveProjectNameHandler() {
+    const input = /** @type AnypointInput */ (this.shadowRoot.querySelector('.new-name-input'));
+    if (!input.value) {
+      return;
+    }
+    // @ts-ignore
+    await MetaStore.patchThis({
+      op: 'replace',
+      path: '/name',
+      value: input.value,
+    }, this.projectId);
+    const k = this._getAmfKey(this.ns.aml.vocabularies.core.name);
+    this.project[k][0]['@value'] = input.value;
+    this.projectNameEditor = false;
+  }
+
+  async _fileImportHandler(e) {
+    const { type, content } = e.detail;
+    this.route = 'importprocessing';
+    const factory = new DomainImporter(this.store);
+    try {
+      this.projectId = await factory.processImport(content, type);
+      this.route = 'domain';
+    } catch (_) {
+      // ...
+    }
   }
 
   _projectCreateDialogTemplate() {
@@ -430,25 +546,90 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
           <page-project-picker
             class="page"
             .store="${this.store}"
-            @newprojectrequested="${this._newProjectRequestHandler}"></page-project-picker>
+            @newprojectrequested="${this._newProjectRequestHandler}"
+            @importrequested="${this._importProjectHandler}"></page-project-picker>
         `;
       case 'domain':
         return html`
-          <page-domain-explorer class="page" .module="${this.module}" .project="${this.project}" .rootModule="${this.rootModule}"></page-domain-explorer>
+        <module-viewer
+          .module="${this.module}"
+          .amf="${this.project}"
+          class="page-padding full-page"
+        ></module-viewer>
         `;
+      case 'import':
+        return html`<page-import-screen
+          class="page-padding full-page"
+          @importprocessresult="${this._fileImportHandler}"></page-import-screen>`;
+      case 'importprocessing': return this.importProcessingTemplate();
       default: return html`Not found`;
     }
   }
 
   render() {
     return html`
-    <main>
-      ${this._renderPage()}
-    </main>
+    ${this._headerTemplate()}
+    <storage-prompt></storage-prompt>
+    <div class="content">
+      ${this._navigationDrawerTemplate()}
+      <main>
+        ${this._renderPage()}
+      </main>
+    </div>
     ${this._projectCreateDialogTemplate()}
     ${this._moduleDetailsViewTemplate()}
     ${this._moduleDetailsEditorTemplate()}
+    ${this._modelDetailsViewTemplate()}
+    ${this._modelDetailsEditorTemplate()}
     `;
+  }
+
+  _headerTemplate() {
+    const { route } = this;
+    if (['domain', 'model'].indexOf(route) === -1) {
+      return '';
+    }
+    const { projectNameEditor } = this;
+    return html`
+    <header>
+      ${projectNameEditor ? this._projectNameEditorTemplate() : this._projectNameHeaderTemplate()}
+    </header>`;
+  }
+
+  _projectNameHeaderTemplate() {
+    const { projectName } = this;
+    return html`<h2 class="project-name" @dblclick="${this._projectDblclickHandler}">${projectName}</h2>`;
+  }
+
+  _projectNameEditorTemplate() {
+    const { projectName } = this;
+    return html`
+    <div class="name-editor">
+      <anypoint-input .value="${projectName}" nolabelfloat outlined class="new-name-input">
+        <label slot="label">Project name</label>
+      </anypoint-input>
+      <anypoint-button emphasis="high" @click="${this._saveProjectNameHandler}">Save</anypoint-button>
+    </div>`;
+  }
+
+  _navigationDrawerTemplate() {
+    const { route } = this;
+    if (['domain', 'model'].indexOf(route) === -1) {
+      return '';
+    }
+    const {
+      compatibility,
+      rootModule,
+      project,
+    } = this;
+    return html`
+    <nav>
+    <domain-navigation
+      ?compatibility="${compatibility}"
+      .amf="${project}"
+      .module="${rootModule}"
+    ></domain-navigation>
+    </nav>`;
   }
 
   _moduleDetailsViewTemplate() {
@@ -472,7 +653,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
         class="inner-editor-padding"
       ></module-details-view>
       <anypoint-button
-        @click="${this._deleteSelectedHandler}"
+        data-property="moduleDetailsOpened"
+        @click="${this._deleteModuleHandler}"
         slot="action"
       >Delete</anypoint-button>
       <div class="flex-last" slot="action">
@@ -482,7 +664,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
         >Close</anypoint-button>
         <anypoint-button
           emphasis="high"
-          @click="${this._editModuleHandler}"
+          data-property="moduleDetailsOpened"
+          data-editor-property="moduleEditorOpened"
+          @click="${this._editSelectedHandler}"
         >Edit</anypoint-button>
       </div>
     </editor-drawer>`;
@@ -509,7 +693,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
         class="inner-editor-padding"
       ></module-details-editor>
       <anypoint-button
-        @click="${this._deleteSelectedHandler}"
+        data-property="moduleEditorOpened"
+        @click="${this._deleteModuleHandler}"
         slot="action"
       >Delete</anypoint-button>
       <anypoint-button
@@ -519,5 +704,88 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
         @click="${this._saveModuleHandler}"
       >Save</anypoint-button>
     </editor-drawer>`;
+  }
+
+  _modelDetailsViewTemplate() {
+    const {
+      compatibility,
+      modelDetailsOpened,
+      actionSelectedType,
+      actionSelected,
+    } = this;
+    const dataModelId = actionSelectedType === 'data-model' ? actionSelected : undefined;
+    const opened = !!dataModelId && modelDetailsOpened;
+    return html`<editor-drawer
+      ?opened="${opened}"
+      @openedchange="${this._drawerOpenedHandler}"
+      data-property="modelDetailsOpened"
+      >
+      <h5 slot="title">Module details</h5>
+      <model-details-view
+        .dataModelId="${dataModelId}"
+        ?compatibility="${compatibility}"
+        class="inner-editor-padding"
+      ></model-details-view>
+      <anypoint-button
+        data-property="modelDetailsOpened"
+        @click="${this._deleteModelHandler}"
+        slot="action"
+      >Delete</anypoint-button>
+      <div class="flex-last" slot="action">
+        <anypoint-button
+          @click="${this._closeDrawerHandler}"
+          data-property="modelDetailsOpened"
+        >Close</anypoint-button>
+        <anypoint-button
+          emphasis="high"
+          data-property="modelDetailsOpened"
+          data-editor-property="modelEditorOpened"
+          @click="${this._editSelectedHandler}"
+        >Edit</anypoint-button>
+      </div>
+    </editor-drawer>`;
+  }
+
+  _modelDetailsEditorTemplate() {
+    const {
+      compatibility,
+      modelEditorOpened,
+      actionSelectedType,
+      actionSelected,
+    } = this;
+    const dataModelId = actionSelectedType === 'data-model' ? actionSelected : undefined;
+    const opened = !!dataModelId && !!modelEditorOpened;
+    return html`<editor-drawer
+      .opened="${opened}"
+      @openedchange="${this._drawerOpenedHandler}"
+      data-property="moduleEditorOpened"
+    >
+      <h5 slot="title">Edit module details</h5>
+      <model-details-editor
+        .dataModelId="${dataModelId}"
+        ?compatibility="${compatibility}"
+        class="inner-editor-padding"
+      ></model-details-editor>
+      <anypoint-button
+        data-property="moduleEditorOpened"
+        @click="${this._deleteModelHandler}"
+        slot="action"
+      >Delete</anypoint-button>
+      <anypoint-button
+        slot="action"
+        class="flex-last"
+        emphasis="high"
+        @click="${this._saveModelHandler}"
+      >Save</anypoint-button>
+    </editor-drawer>`;
+  }
+
+  importProcessingTemplate() {
+    return html`
+    <div class="title-line">
+      <h2>Processing files</h2>
+      <progress></progress>
+    </div>
+    `;
   }
 }
