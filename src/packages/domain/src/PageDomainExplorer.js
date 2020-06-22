@@ -98,6 +98,15 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
     this._store = value;
   }
 
+  get projectName() {
+    const { project } = this;
+    let name = this._getValue(project, this.ns.aml.vocabularies.core.name);
+    if (!name) {
+      name = 'New project';
+    }
+    return String(name);
+  }
+
   constructor() {
     super();
     this.module = /** @type ModuleInstance */ (null);
@@ -113,15 +122,6 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener(ModelingEventTypes.State.Navigation.action, this._actionHandler);
-  }
-
-  get projectName() {
-    const { project } = this;
-    let name = this._getValue(project, this.ns.aml.vocabularies.core.name);
-    if (!name) {
-      name = 'New project';
-    }
-    return String(name);
   }
 
   _actionHandler(e) {
@@ -161,7 +161,7 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
     }
     this.moduleEditorOpened = false;
     const changes = editor.changelog();
-    
+
     if (!changes.length) {
       return;
     }
@@ -204,8 +204,8 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
     } = this;
     return html`
     <nav>
-    <domain-navigation 
-      ?compatibility="${compatibility}" 
+    <domain-navigation
+      ?compatibility="${compatibility}"
       .amf="${rootModule}"
       .module="${rootModule}"
     ></domain-navigation>
@@ -221,8 +221,8 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
     if (!module) {
       return '';
     }
-    
-    return html`<module-viewer 
+
+    return html`<module-viewer
       ?compatibility="${compatibility}"
       .module="${module}"
       .amf="${project}"></module-viewer>`;
@@ -237,7 +237,7 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
     } = this;
     const moduleId = selectedType === 'module' ? selected : undefined;
     const opened = !!moduleId && moduleDetailsOpened;
-    return html`<editor-drawer 
+    return html`<editor-drawer
       ?opened="${opened}"
       @openedchange="${this._drawerOpenedHandler}"
       data-property="moduleDetailsOpened"
@@ -248,16 +248,16 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
         ?compatibility="${compatibility}"
         class="inner-editor-padding"
       ></module-details-view>
-      <anypoint-button 
-        @click="${this._deleteSelectedHandler}" 
-        slot="action" 
+      <anypoint-button
+        @click="${this._deleteSelectedHandler}"
+        slot="action"
       >Delete</anypoint-button>
       <div class="flex-last" slot="action">
-        <anypoint-button 
-          @click="${this._closeDrawerHandler}" 
+        <anypoint-button
+          @click="${this._closeDrawerHandler}"
           data-property="moduleDetailsOpened"
         >Close</anypoint-button>
-        <anypoint-button 
+        <anypoint-button
           emphasis="high"
           @click="${this._editModuleHandler}"
         >Edit</anypoint-button>
@@ -274,7 +274,7 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
     } = this;
     const moduleId = selectedType === 'module' ? selected : undefined;
     const opened = !!moduleId && !!moduleEditorOpened;
-    return html`<editor-drawer 
+    return html`<editor-drawer
       .opened="${opened}"
       @openedchange="${this._drawerOpenedHandler}"
       data-property="moduleEditorOpened"
@@ -285,12 +285,12 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
         ?compatibility="${compatibility}"
         class="inner-editor-padding"
       ></module-details-editor>
-      <anypoint-button 
-        @click="${this._deleteSelectedHandler}" 
-        slot="action" 
+      <anypoint-button
+        @click="${this._deleteSelectedHandler}"
+        slot="action"
       >Delete</anypoint-button>
-      <anypoint-button 
-        slot="action" 
+      <anypoint-button
+        slot="action"
         class="flex-last"
         emphasis="high"
         @click="${this._saveModuleHandler}"
