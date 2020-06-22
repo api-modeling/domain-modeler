@@ -1,23 +1,30 @@
 import { LitElement, html, css } from 'lit-element';
 import { ModelingFrontStore } from '@api-modeling/modeling-front-store';
-import { ModelingEventTypes } from  '@api-modeling/modeling-events';
+import { ModelingEventTypes, ModelingEvents } from  '@api-modeling/modeling-events';
 import { ModuleMixin } from '@api-modeling/modeling-amf-mixin';
 import '@anypoint-web-components/anypoint-dialog/anypoint-dialog.js';
 import '@anypoint-web-components/anypoint-input/anypoint-input.js';
 import '@anypoint-web-components/anypoint-button/anypoint-button.js';
+import '@api-modeling/modeling-editors-ui/editor-drawer.js';
+import '@api-modeling/modeling-editors-ui/module-details-view.js';
+import '@api-modeling/modeling-editors-ui/module-details-editor.js';
 // pages
 import './packages/projects/page-project-picker.js';
 import './packages/domain/page-domain-explorer.js';
 
+/* global MetaStore */
+
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateModuleCreateEvent} DomainStateModuleCreateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateModuleDeleteEvent} DomainStateModuleDeleteEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateModuleUpdateEvent} DomainStateModuleUpdateEvent */
+/** @typedef {import('@api-modeling/modeling-events').Events.DomainStateDataModelCreateEvent} DomainStateDataModelCreateEvent */
 
 const projectIdValue = Symbol('projectIdValue');
 const requestProject = Symbol('requestProject');
 const moduleAddHandler = Symbol('moduleAddHandler');
 const moduleDeleteHandler = Symbol('moduleDeleteHandler');
 const moduleUpdateHandler = Symbol('moduleUpdateHandler');
+const modelUpdateHandler = Symbol('modelUpdateHandler');
 
 export class ApiModelingApp extends ModuleMixin(LitElement) {
   static get styles() {
@@ -25,6 +32,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     :host {
       height: 100%;
       display: block;
+      --modeling-drawer-width: 320px;
+      overflow: hidden;
+      position: relative;
     }
 
     main {
@@ -38,6 +48,21 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
     .project-input {
       width: 320px;
+    }
+
+    .project-name {
+      margin: 0;
+      padding: 0 0 0 24px;
+      font-size: 24px;
+      font-weight: 400;
+    }
+
+    .inner-editor-padding {
+      padding: 16px;
+    }
+
+    .flex-last {
+      margin-left: auto;
     }
     `;
   }
@@ -58,6 +83,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       rootModule: { type: Object },
       module: { type: Object },
       renderNameDialog: { type: Boolean },
+      moduleDetailsOpened: { type: Boolean },
     };
   }
 
@@ -106,16 +132,19 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.params = {};
     this.query = {};
     this.renderNameDialog = false;
+    this.moduleDetailsOpened = false;
     this._clickHandler = this._clickHandler.bind(this);
 
     this.store = new ModelingFrontStore();
 
     this._navigateHandler = this._navigateHandler.bind(this);
     this._navigationHandler = this._navigationHandler.bind(this);
+    this._modelingActionHandler = this._modelingActionHandler.bind(this);
 
     this[moduleAddHandler] = this[moduleAddHandler].bind(this);
     this[moduleDeleteHandler] = this[moduleDeleteHandler].bind(this);
     this[moduleUpdateHandler] = this[moduleUpdateHandler].bind(this);
+    this[modelUpdateHandler] = this[modelUpdateHandler].bind(this);
   }
 
   connectedCallback() {
@@ -123,10 +152,12 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.addEventListener('click', this._clickHandler);
     this.addEventListener('navigate', this._navigateHandler);
     window.addEventListener(ModelingEventTypes.State.Navigation.change, this._navigationHandler);
+    window.addEventListener(ModelingEventTypes.State.Navigation.action, this._modelingActionHandler);
 
     window.addEventListener(ModelingEventTypes.State.Module.created, this[moduleAddHandler]);
     window.addEventListener(ModelingEventTypes.State.Module.deleted, this[moduleDeleteHandler]);
     window.addEventListener(ModelingEventTypes.State.Module.updated, this[moduleUpdateHandler]);
+    window.addEventListener(ModelingEventTypes.State.Model.updated, this[modelUpdateHandler]);
   }
 
   router(route, params, query) {
@@ -148,6 +179,15 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   _navigationHandler(e) {
     if (e.detail.type === 'module') {
       this._selectModule(e.detail.selected);
+    }
+  }
+
+  _modelingActionHandler(e) {
+    const { action, property, selected } = e.detail;
+    this.actionSelected = selected;
+    this.actionSelectedType = property;
+    if (action === 'view' && property === 'module') {
+      this.moduleDetailsOpened = true;
     }
   }
 
@@ -184,28 +224,79 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
    * @param {DomainStateModuleCreateEvent} e
    */
   async [moduleAddHandler](e) {
-    if (!this.rootModule) {
+    const { rootModule } = this;
+    if (!rootModule) {
       return;
     }
-    const { parent } = e.detail;
-    if (this.rootModule['@id'] !== parent) {
+    const { parent, id } = e.detail;
+    if (rootModule['@id'] !== parent) {
       return;
     }
-    this[requestProject](this.projectId);
+    const k = this._getAmfKey(this.ns.aml.vocabularies.modularity.modules);
+    if (!(k in rootModule)) {
+      rootModule[k] = [];
+    }
+    const mod = await ModelingEvents.Module.read(this, id);
+    rootModule[k].push(mod);
+    this.requestUpdate();
   }
 
-  [moduleDeleteHandler]() {
-    if (!this.rootModule) {
+  [moduleDeleteHandler](e) {
+    const { rootModule } = this;
+    if (!rootModule) {
       return;
     }
-    this[requestProject](this.projectId);
+    const { id } = e.detail;
+    const k = this._getAmfKey(this.ns.aml.vocabularies.modularity.modules);
+    if (!(k in rootModule)) {
+      return;
+    }
+    const index = rootModule[k].findIndex((mod) => mod['@id'] === id);
+    if (index === -1) {
+      return;
+    }
+    rootModule[k].splice(index, 1);
+    this.requestUpdate();
   }
 
-  [moduleUpdateHandler]() {
-    if (!this.rootModule) {
+  async [moduleUpdateHandler](e) {
+    const { rootModule } = this;
+    if (!rootModule) {
       return;
     }
-    this[requestProject](this.projectId);
+    const { id } = e.detail;
+    const k = this._getAmfKey(this.ns.aml.vocabularies.modularity.modules);
+    if (!(k in rootModule)) {
+      return;
+    }
+    const index = rootModule[k].findIndex((mod) => mod['@id'] === id);
+    if (index === -1) {
+      return;
+    }
+    const mod = await ModelingEvents.Module.read(this, id);
+    rootModule[k][index] = mod;
+    this.requestUpdate();
+  }
+
+  /**
+   * @param {DomainStateDataModelCreateEvent} e
+   */
+  async [modelUpdateHandler](e) {
+    const { rootModule } = this;
+    if (!rootModule) {
+      return;
+    }
+    const { parent, id } = e.detail;
+    if (rootModule['@id'] !== parent) {
+      return;
+    }
+    const k = this._getAmfKey(this.ns.aml.vocabularies.modularity.dataModels);
+    if (!(k in rootModule)) {
+      rootModule[k] = [];
+    }
+    const mod = await ModelingEvents.Model.read(this, id);
+    rootModule[k].push(mod);
+    this.requestUpdate();
   }
 
   _clickHandler(e) {
@@ -254,6 +345,48 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.renderNameDialog = false;
     this.projectId = pid;
     this.route = 'domain';
+  }
+
+  _drawerOpenedHandler(e) {
+    if (e.target.opened) {
+      return;
+    }
+    this._closeDrawerHandler(e);
+  }
+
+  _closeDrawerHandler(e) {
+    const prop = e.target.dataset.property;
+    this[prop] = false;
+  }
+
+  _deleteSelectedHandler() {
+    this.moduleDetailsOpened = false;
+  }
+
+  _editModuleHandler() {
+    this.moduleDetailsOpened = false;
+    this.moduleEditorOpened = true;
+    // ModelingEvents.State.Navigation.action(this, )
+  }
+
+  async _saveModuleHandler(e) {
+    if (this.actionSelectedType !== 'module') {
+      return;
+    }
+    const editor = e.target.previousElementSibling.previousElementSibling;
+    if (!editor.validate()) {
+      return;
+    }
+    this.moduleEditorOpened = false;
+    const changes = editor.changelog();
+
+    if (!changes.length) {
+      return;
+    }
+    // @ts-ignore
+    const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
+    await ps;
+    ModelingEvents.State.Module.updated(window, this.actionSelected);
   }
 
   _projectCreateDialogTemplate() {
@@ -309,10 +442,82 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
   render() {
     return html`
-    ${this._projectCreateDialogTemplate()}
     <main>
       ${this._renderPage()}
     </main>
+    ${this._projectCreateDialogTemplate()}
+    ${this._moduleDetailsViewTemplate()}
+    ${this._moduleDetailsEditorTemplate()}
     `;
+  }
+
+  _moduleDetailsViewTemplate() {
+    const {
+      compatibility,
+      moduleDetailsOpened,
+      actionSelectedType,
+      actionSelected,
+    } = this;
+    const moduleId = actionSelectedType === 'module' ? actionSelected : undefined;
+    const opened = !!moduleId && moduleDetailsOpened;
+    return html`<editor-drawer
+      ?opened="${opened}"
+      @openedchange="${this._drawerOpenedHandler}"
+      data-property="moduleDetailsOpened"
+      >
+      <h5 slot="title">Module details</h5>
+      <module-details-view
+        .moduleId="${moduleId}"
+        ?compatibility="${compatibility}"
+        class="inner-editor-padding"
+      ></module-details-view>
+      <anypoint-button
+        @click="${this._deleteSelectedHandler}"
+        slot="action"
+      >Delete</anypoint-button>
+      <div class="flex-last" slot="action">
+        <anypoint-button
+          @click="${this._closeDrawerHandler}"
+          data-property="moduleDetailsOpened"
+        >Close</anypoint-button>
+        <anypoint-button
+          emphasis="high"
+          @click="${this._editModuleHandler}"
+        >Edit</anypoint-button>
+      </div>
+    </editor-drawer>`;
+  }
+
+  _moduleDetailsEditorTemplate() {
+    const {
+      compatibility,
+      moduleEditorOpened,
+      actionSelectedType,
+      actionSelected,
+    } = this;
+    const moduleId = actionSelectedType === 'module' ? actionSelected : undefined;
+    const opened = !!moduleId && !!moduleEditorOpened;
+    return html`<editor-drawer
+      .opened="${opened}"
+      @openedchange="${this._drawerOpenedHandler}"
+      data-property="moduleEditorOpened"
+    >
+      <h5 slot="title">Edit module details</h5>
+      <module-details-editor
+        .moduleId="${moduleId}"
+        ?compatibility="${compatibility}"
+        class="inner-editor-padding"
+      ></module-details-editor>
+      <anypoint-button
+        @click="${this._deleteSelectedHandler}"
+        slot="action"
+      >Delete</anypoint-button>
+      <anypoint-button
+        slot="action"
+        class="flex-last"
+        emphasis="high"
+        @click="${this._saveModuleHandler}"
+      >Save</anypoint-button>
+    </editor-drawer>`;
   }
 }

@@ -1,24 +1,19 @@
 import { html, css, LitElement } from 'lit-element';
-import { ScopedElementsMixin } from '@open-wc/scoped-elements';
-import { DomainNavigationElement, ModuleViewerElement } from '@api-modeling/modeling-project-ui';
+import '@api-modeling/modeling-project-ui/domain-navigation.js';
+import '@api-modeling/modeling-project-ui/module-viewer.js';
+import '@anypoint-web-components/anypoint-button/anypoint-button.js';
 import { ModuleMixin } from '@api-modeling/modeling-amf-mixin';
-import { ModelingEventTypes, ModelingEvents } from  '@api-modeling/modeling-events';
-import { EditorDrawerElement, ModuleDetailsViewElement, ModuleDetailsEditorElement } from '@api-modeling/modeling-editors-ui';
-import { AnypointButton } from '@anypoint-web-components/anypoint-button';
+// import { ModelingEventTypes, ModelingEvents } from  '@api-modeling/modeling-events';
 
-/* global MetaStore */
 
 /** @typedef {import('@api-modeling/modeling-front-store').ModelingFrontStore} ModelingFrontStore */
 /** @typedef {import('@api-modeling/modeling-amf-mixin/src/AmfTypes').ModuleInstance} ModuleInstance */
 /** @typedef {import('@api-modeling/modeling-amf-mixin/src/AmfTypes').ProjectInstance} ProjectInstance */
 
-export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitElement)) {
+export class PageDomainExplorer extends ModuleMixin(LitElement) {
   static get styles() {
     return css`
     :host {
-      --modeling-drawer-width: 320px;
-      overflow: hidden;
-      position: relative;
       display: flex;
       flex-direction: column;
     }
@@ -29,13 +24,6 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
       display: flex;
       flex-direction: row;
       align-items: center;
-    }
-
-    .project-name {
-      margin: 0;
-      padding: 0 0 0 24px;
-      font-size: 24px;
-      font-weight: 400;
     }
 
     .content {
@@ -53,26 +41,7 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
       flex: 1;
       padding: 12px 24px;
     }
-
-    .inner-editor-padding {
-      padding: 16px;
-    }
-
-    .flex-last {
-      margin-left: auto;
-    }
     `;
-  }
-
-  static get scopedElements() {
-    return {
-      'domain-navigation': DomainNavigationElement,
-      'module-viewer': ModuleViewerElement,
-      'editor-drawer': EditorDrawerElement,
-      'module-details-view': ModuleDetailsViewElement,
-      'module-details-editor': ModuleDetailsEditorElement,
-      'anypoint-button': AnypointButton,
-    };
   }
 
   static get properties() {
@@ -121,7 +90,7 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
 
   connectedCallback() {
     super.connectedCallback();
-    window.addEventListener(ModelingEventTypes.State.Navigation.action, this._actionHandler);
+    // window.addEventListener(ModelingEventTypes.State.Navigation.action, this._actionHandler);
   }
 
   _actionHandler(e) {
@@ -152,23 +121,7 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
   _editModuleHandler() {
     this.moduleDetailsOpened = false;
     this.moduleEditorOpened = true;
-  }
-
-  async _saveModuleHandler(e) {
-    const editor = e.target.previousElementSibling.previousElementSibling;
-    if (!editor.validate()) {
-      return;
-    }
-    this.moduleEditorOpened = false;
-    const changes = editor.changelog();
-
-    if (!changes.length) {
-      return;
-    }
-    // @ts-ignore
-    const ps = changes.map((change) => MetaStore.patchThis(change, this.dataModelId));
-    await ps;
-    ModelingEvents.State.Module.updated(window, this.selected);
+    // ModelingEvents.State.Navigation.action(this, )
   }
 
   render() {
@@ -180,8 +133,6 @@ export class PageDomainExplorer extends ModuleMixin(ScopedElementsMixin(LitEleme
         ${this._renderPage()}
       </main>
     </div>
-    ${this._moduleDetailsViewTemplate()}
-    ${this._moduleDetailsEditorTemplate()}
     `;
   }
 
