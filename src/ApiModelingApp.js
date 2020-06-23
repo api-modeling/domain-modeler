@@ -524,6 +524,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     try {
       this.projectId = await factory.processImport(content, type);
       this.route = 'domain';
+      this.persistence.storeState();
     } catch (_) {
       // ...
     }
