@@ -16,6 +16,8 @@ html {
   --anypoint-color-primary: var(--primary-color);
   --anypoint-dialog-background-color: #fff;
   --error-color: #D32F2F;
+  --secondary-text-color: #9E9E9E;
+  --anypoint-item-body-secondary-color: #9E9E9E;
 }
 html {
   font-family: 'Roboto', sans-serif;
