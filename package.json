@@ -55,6 +55,7 @@
     "@github/time-elements": "^3.1.1",
     "@open-wc/scoped-elements": "^1.1.1",
     "@types/pouchdb": "^6.4.0",
+    "elix": "^14.0.0",
     "lit-element": "^2.2.1",
     "lit-element-router": "^2.0.3",
     "lit-html": "^1.1.2",

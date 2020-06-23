@@ -25,6 +25,7 @@ import './packages/storage/storage-prompt.js';
 import { DomainImporter } from './packages/storage/src/DomainImporter.js';
 import appStyles from './ApiModelingApp.styles.js';
 import { StorePersistanceApi } from './packages/storage/src/StorePersistanceApi.js'
+import ModelingAlertDialog from './packages/helpers/modeling-alert-dialog.js';
 
 /* global MetaStore */
 
@@ -44,6 +45,7 @@ const moduleUpdateHandler = Symbol('moduleUpdateHandler');
 const modelAddHandler = Symbol('modelAddHandler');
 const modelDeleteHandler = Symbol('modelDeleteHandler');
 const modelUpdateHandler = Symbol('modelUpdateHandler');
+const unhandledRejectionHandler = Symbol('unhandledRejectionHandler');
 
 export class ApiModelingApp extends ModuleMixin(LitElement) {
   static get styles() {
@@ -136,6 +138,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this[modelAddHandler] = this[modelAddHandler].bind(this);
     this[modelUpdateHandler] = this[modelUpdateHandler].bind(this);
     this[modelDeleteHandler] = this[modelDeleteHandler].bind(this);
+
+    window.onunhandledrejection = this[unhandledRejectionHandler].bind(this);
   }
 
   connectedCallback() {
@@ -152,11 +156,13 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     window.addEventListener(ModelingEventTypes.State.Model.deleted, this[modelDeleteHandler]);
   }
 
-  router(route, params, query) {
-    this.route = route;
-    this.params = params;
-    this.query = query;
-    // console.log(route, params, query, data);
+  [unhandledRejectionHandler](e) {
+    const dialog = new ModelingAlertDialog();
+    dialog.message = e.reason.message;
+    // @ts-ignore
+    dialog.choices = ['Dismiss'];
+    // @ts-ignore
+    dialog.open();
   }
 
   _navigateHandler(e) {
