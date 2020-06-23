@@ -91,4 +91,15 @@ main {
 .full-page {
   height: 100%;
 }
+
+.spacer {
+  flex: 1;
+  display: block;
+}
+
+.menu-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+}
 `;

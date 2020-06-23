@@ -15,6 +15,11 @@ import '@api-modeling/modeling-editors-ui/entity-editor.js';
 import '@anypoint-web-components/anypoint-styles/colors.js';
 import '@api-modeling/modeling-project-ui/domain-navigation.js';
 import '@api-modeling/modeling-project-ui/module-viewer.js';
+import '@anypoint-web-components/anypoint-menu-button/anypoint-menu-button.js';
+import '@anypoint-web-components/anypoint-button/anypoint-icon-button.js';
+import '@anypoint-web-components/anypoint-listbox/anypoint-listbox.js';
+import '@anypoint-web-components/anypoint-item/anypoint-item.js';
+import '@api-modeling/modeling-icons/modeling-icon.js';
 
 // pages
 import './packages/projects/page-project-picker.js';
@@ -24,7 +29,7 @@ import './packages/storage/page-import-screen.js';
 import './packages/storage/storage-prompt.js';
 import { DomainImporter } from './packages/storage/src/DomainImporter.js';
 import appStyles from './ApiModelingApp.styles.js';
-import { StorePersistanceApi } from './packages/storage/src/StorePersistanceApi.js'
+import { StorePersistenceApi } from './packages/storage/src/StorePersistenceApi.js'
 import ModelingAlertDialog from './packages/helpers/modeling-alert-dialog.js';
 
 /* global MetaStore */
@@ -125,8 +130,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.projectNameEditor = false;
 
     this.store = new ModelingFrontStore();
-    this.persistance = new StorePersistanceApi(this.store);
-    this.persistance.listen();
+    this.persistence = new StorePersistenceApi(this.store);
+    this.persistence.listen();
 
     this._navigateHandler = this._navigateHandler.bind(this);
     this._navigationHandler = this._navigationHandler.bind(this);
@@ -178,6 +183,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const { selected, type } = e.detail;
     if (type === 'module') {
       this._selectModule(selected);
+    } else if (type === 'data-model') {
+      this._selectDataModel(selected);
     } else if (type === 'entity') {
       this._selectEntity(selected);
     }
@@ -209,6 +216,13 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.actionSelected = id;
     this.actionSelectedType = 'entity';
     this.entityDetailsOpened = true;
+  }
+
+  async _selectDataModel(id) {
+    this.route = 'model';
+    this.actionSelected = id;
+    this.actionSelectedType = 'data-model';
+    this.modelDetailsOpened = true;
   }
 
   /**
@@ -371,7 +385,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
   async _restoreProjectHandler(e) {
     const { id } = e.detail;
-    const project = await this.persistance.restore(id);
+    const project = await this.persistence.restore(id);
     this.projectId = project['@id'];
     this.route = 'domain';
   }
@@ -500,7 +514,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const k = this._getAmfKey(this.ns.aml.vocabularies.core.name);
     this.project[k][0]['@value'] = input.value;
     this.projectNameEditor = false;
-    await this.persistance.storeState();
+    await this.persistence.storeState();
   }
 
   async _fileImportHandler(e) {
@@ -556,7 +570,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
           <page-project-picker
             class="page"
             .store="${this.store}"
-            .persistance="${this.persistance}"
+            .persistence="${this.persistence}"
             @newprojectrequested="${this._newProjectRequestHandler}"
             @importrequested="${this._importProjectHandler}"
             @restore="${this._restoreProjectHandler}"></page-project-picker>
@@ -578,6 +592,58 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       case 'importprocessing': return this.importProcessingTemplate();
       default: return html`Not found`;
     }
+  }
+
+  _mainMenuHandler(e) {
+    const { item } = e.detail;
+    if (!item) {
+      // cancelled selection
+      return;
+    }
+    const { action } = item.dataset;
+    switch (action) {
+      case 'close':
+        this.closeProject();
+        break;
+      case 'delete':
+        this.deleteProject();
+        break;
+      default:
+    }
+  }
+
+  /**
+   * Clears the variables responsible for actions and routing
+   */
+  crearState() {
+    this.actionSelected = null;
+    this.actionSelectedType = null;
+    this.route = null;
+    this.params = null;
+    this.project = null;
+    this.projectId = null;
+  }
+
+  /**
+   * Closes current project and returns to the main screen
+   * @return {Promise<void>}
+   */
+  async closeProject() {
+    await this.persistence.resetStore();
+    this.crearState();
+    this.route = 'start';
+  }
+
+  /**
+   * Removes currernt project from the data store and returns to the main screen.
+   * @return {Promise<void>}
+   */
+  async deleteProject() {
+    const { projectId } = this;
+    await this.persistence.resetStore();
+    await this.persistence.deleteProject(projectId);
+    this.crearState();
+    this.route = 'start';
   }
 
   render() {
@@ -609,7 +675,31 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     return html`
     <header>
       ${projectNameEditor ? this._projectNameEditorTemplate() : this._projectNameHeaderTemplate()}
+      <span class="spacer"></span>
+      ${this._mainDropdownTemplate()}
     </header>`;
+  }
+
+  _mainDropdownTemplate() {
+    return html`<anypoint-menu-button horizontalAlign="right" horizontalOffset="12" closeOnActivate @select="${this._mainMenuHandler}">
+      <anypoint-icon-button
+        slot="dropdown-trigger"
+        aria-label="activate for project menu"
+        title="Project menu"
+      >
+        <modeling-icon icon="moreVert" alt="menu"></modeling-icon>
+      </anypoint-icon-button>
+      <anypoint-listbox slot="dropdown-content">
+        <anypoint-item data-action="close" class="menu-item">
+          <modeling-icon icon="close" alt="Close icon" class="menu-icon"></modeling-icon>
+          Close project
+        </anypoint-item>
+        <anypoint-item data-action="delete" class="menu-item">
+          <modeling-icon icon="deleteIcon" alt="Delete icon" class="menu-icon"></modeling-icon>
+          Delete project
+        </anypoint-item>
+      </anypoint-listbox>
+    </anypoint-menu-button>`;
   }
 
   _projectNameHeaderTemplate() {

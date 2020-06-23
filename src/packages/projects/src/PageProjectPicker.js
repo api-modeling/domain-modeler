@@ -7,7 +7,7 @@ import '@anypoint-web-components/anypoint-listbox/anypoint-listbox.js';
 import '@github/time-elements';
 
 /** @typedef {import('@api-modeling/modeling-front-store').ModelingFrontStore} ModelingFrontStore */
-/** @typedef {import('../../storage/src/StorePersistanceApi.js').StorePersistanceApi} StorePersistanceApi */
+/** @typedef {import('../../storage/src/StorePersistenceApi.js').StorePersistenceApi} StorePersistenceApi */
 
 const queryOptions = Symbol('queryOptions');
 
@@ -45,14 +45,14 @@ export class PageProjectPicker extends LitElement {
   }
 
   /**
-   * @return {StorePersistanceApi}
+   * @return {StorePersistenceApi}
    */
-  get persistance() {
-    return this._persistance;
+  get persistence() {
+    return this._persistence;
   }
 
-  set persistance(value) {
-    this._persistance = value;
+  set persistence(value) {
+    this._persistence = value;
   }
 
   constructor() {
@@ -72,7 +72,7 @@ export class PageProjectPicker extends LitElement {
   async queryRecent() {
     const qo = this[queryOptions] || {};
     qo.limit = 5;
-    const result = await this.persistance.recent(qo);
+    const result = await this.persistence.recent(qo);
     this[queryOptions] = result.options;
     this.recent = result.items;
   }

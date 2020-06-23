@@ -15,7 +15,7 @@ let listening = false;
 
 /**
  * While modeling-frontent-storage module acts as a bridge between the front end
- * the the low-level storage, this module is designed to function as a persistance layer for the
+ * the the low-level storage, this module is designed to function as a persistence layer for the
  * application data.
  *
  * If automatically stores the state in the application store when data change
@@ -26,19 +26,19 @@ let listening = false;
  * Basic setup:
  *
  * ```javascript
- * const persistance = new StorePersistanceApi(new ModelingFrontStore());
- * persistance.listen();
+ * const persistence = new StorePersistenceApi(new ModelingFrontStore());
+ * persistence.listen();
  *
  * ...
  *
- * const queryResult = await persistance.recent();
+ * const queryResult = await persistence.recent();
  *
  * ...
  *
- * const project = await persistance.restore(queryResult.items[0]._id);
+ * const project = await persistence.restore(queryResult.items[0]._id);
  * ```
  */
-export class StorePersistanceApi {
+export class StorePersistenceApi {
   /**
    * @param {ModelingFrontStore} api An instance of the modeling front store
    * @param {EventTarget=} eventsTarget A node to listen to modeling events.
@@ -228,5 +228,25 @@ export class StorePersistanceApi {
     } catch (e) {
       // console.error(e);
     }
+  }
+
+  /**
+   * Removes a project from the stores.
+   * @return {Promise<void>}
+   */
+  async deleteProject(id) {
+    try {
+      // This is in the try block in case if for any reason
+      // both stores got desynchronized. Remove index so it won't
+      // be shown in the recents.
+      const dataResult = await this.offlineStore.allDocs({ key: id });
+      const dataRev = dataResult.rows[0].value.rev;
+      await this.offlineStore.remove(id, dataRev);
+    } catch (e) {
+      // ..
+    }
+    const response = await this.offlineStoreIndex.allDocs({ key: id });
+    const { rev } = response.rows[0].value;
+    await this.offlineStoreIndex.remove(id, rev);
   }
 }
