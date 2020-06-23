@@ -2,7 +2,7 @@ import { css } from 'lit-element';
 
 export default css`
 :host {
-  height: 100%;
+  /* height: 100%; */
   display: flex;
   flex-direction: column;
   --modeling-drawer-width: 320px;
@@ -33,7 +33,7 @@ header {
 .content {
   display: flex;
   flex-direction: row;
-  flex: 1;
+  height: 100%;
 }
 
 nav {
@@ -46,11 +46,11 @@ main {
   flex: 1;
   display: block;
   background: #E5E5E5;
+  height: 100%;
+  overflow: auto;
 }
 
-.page {
-  height: 100%;
-}
+.page {}
 
 .project-input {
   width: 320px;
@@ -81,6 +81,7 @@ main {
 
 .page-padding {
   padding: 24px;
+  box-sizing: border-box;
 }
 
 .name-editor {
