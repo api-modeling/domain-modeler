@@ -24,6 +24,7 @@ import '@api-modeling/modeling-icons/modeling-icon.js';
 // pages
 import './packages/projects/page-project-picker.js';
 import './packages/storage/page-import-screen.js';
+import './packages/domain/page-model-designer.js';
 
 // helpers
 import './packages/storage/storage-prompt.js';
@@ -70,6 +71,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
        * An ID of the selected project
        */
       projectId: { type: String },
+      dataModelId: { type: String },
       rootModule: { type: Object },
       module: { type: Object },
       renderNameDialog: { type: Boolean },
@@ -220,6 +222,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
   async _selectDataModel(id) {
     this.route = 'model';
+    this.dataModelId = id;
     this.actionSelected = id;
     this.actionSelectedType = 'data-model';
     this.modelDetailsOpened = true;
@@ -585,7 +588,11 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
         ></module-viewer>
         `;
       case 'model':
-        return html`<p>Data model visualization</p>`;
+        return html`
+        <page-model-designer
+          .dataModelId="${this.dataModelId}"
+        >
+        </page-model-designer>`;
       case 'import':
         return html`<page-import-screen
           class="page-padding full-page"
@@ -623,6 +630,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.params = null;
     this.project = null;
     this.projectId = null;
+    this.dataModelId = null;
   }
 
   /**

@@ -1,6 +1,8 @@
 html {
   --primary-color: #000000;
   --accent-color: rgb(33, 150, 243);
+  /* Text primary color on the accent background */
+  --text-primary-color: #fff;
   --dark-divider-opacity: 0.12;
   --arc-font-body1-font-size: 14px;
   --arc-font-body1-font-weight: 400;

@@ -44,13 +44,15 @@ nav {
 
 main {
   flex: 1;
-  display: block;
+  display: flex;
   background: #E5E5E5;
   height: 100%;
   overflow: auto;
 }
 
-.page {}
+.page {
+  flex: 1;
+}
 
 .project-input {
   width: 320px;
