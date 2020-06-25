@@ -12,6 +12,7 @@ import '@api-modeling/modeling-editors-ui/model-details-view.js';
 import '@api-modeling/modeling-editors-ui/model-details-editor.js';
 import '@api-modeling/modeling-editors-ui/entity-details-view.js';
 import '@api-modeling/modeling-editors-ui/entity-editor.js';
+import '@api-modeling/modeling-editors-ui/attribute-editor.js';
 import '@anypoint-web-components/anypoint-styles/colors.js';
 import '@api-modeling/modeling-project-ui/domain-navigation.js';
 import '@api-modeling/modeling-project-ui/module-viewer.js';
@@ -81,9 +82,11 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       modelEditorOpened: { type: Boolean },
       entityDetailsOpened: { type: Boolean },
       entityEditorOpened: { type: Boolean },
+      attributeEditorOpened: { type: Boolean },
       projectNameEditor: { type: Boolean },
       actionSelected:  { type: String },
       actionSelectedType:  { type: String },
+      attributeSelected:  { type: String },
     };
   }
 
@@ -130,6 +133,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.entityDetailsOpened = false;
     this.entityEditorOpened = false;
     this.projectNameEditor = false;
+    this.attributeEditorOpened = false;
+    this.attributeSelected = null
 
     this.store = new ModelingFrontStore();
     this.persistence = new StorePersistenceApi(this.store);
@@ -194,16 +199,45 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
   _modelingActionHandler(e) {
     const { action, property, selected } = e.detail;
+
+    switch (action) {
+      case 'view': this._processViewAction(property, selected); break;
+      case 'edit': this._processEditAction(property, selected); break;
+      default:
+    }
+  }
+
+  _processViewAction(property, selected) {
     this.actionSelected = selected;
     this.actionSelectedType = property;
-    if (action === 'view' && property === 'module') {
-      this.moduleDetailsOpened = true;
-    } else if (action === 'view' && property === 'data-model') {
-      this.modelDetailsOpened = true;
-    } else if (action === 'edit' && property === 'module') {
-      this.moduleEditorOpened = true;
-    } else if (action === 'edit' && property === 'data-model') {
-      this.modelEditorOpened = true;
+    switch (property) {
+      case 'module':
+        this.moduleDetailsOpened = true;
+        break;
+      case 'data-model':
+        this.modelDetailsOpened = true;
+        break;
+      default:
+    }
+  }
+
+  _processEditAction(property, selected) {
+    switch (property) {
+      case 'module':
+        this.actionSelected = selected;
+        this.actionSelectedType = property;
+        this.moduleEditorOpened = true;
+        break;
+      case 'data-model':
+        this.actionSelected = selected;
+        this.actionSelectedType = property;
+        this.modelEditorOpened = true;
+        break;
+      case 'attribute':
+        this.attributeSelected = selected;
+        this.attributeEditorOpened = true;
+        break;
+      default:
     }
   }
 
@@ -453,6 +487,19 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     await this.store.removeDataModel(this.actionSelected);
   }
 
+  async _deleteEntityHandler(e) {
+    if (this.actionSelectedType !== 'entity') {
+      return;
+    }
+    this._closeDrawerHandler(e);
+    await this.store.removeEntity(this.actionSelected);
+  }
+
+  async _deleteAttributeHandler(e) {
+    this._closeDrawerHandler(e);
+    await this.store.removeAttribute(this.attributeSelected);
+  }
+
   _editSelectedHandler(e) {
     const { property, editorProperty } = e.target.dataset;
     this[property] = false;
@@ -497,6 +544,43 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
     await ps;
     ModelingEvents.State.Module.updated(window, this.actionSelected);
+  }
+
+  async _saveEntityHandler(e) {
+    if (this.actionSelectedType !== 'entity') {
+      return;
+    }
+    const editor = e.target.previousElementSibling.previousElementSibling;
+    if (!editor.validate()) {
+      return;
+    }
+    this.modelEditorOpened = false;
+    const changes = editor.changelog();
+
+    if (!changes.length) {
+      return;
+    }
+    // @ts-ignore
+    const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
+    await ps;
+    ModelingEvents.State.Entity.updated(window, this.actionSelected);
+  }
+
+  async _saveAttributeHandler(e) {
+    const editor = e.target.previousElementSibling.previousElementSibling;
+    if (!editor.validate()) {
+      return;
+    }
+    this.attributeEditorOpened = false;
+    const changes = editor.changelog();
+
+    if (!changes.length) {
+      return;
+    }
+    // @ts-ignore
+    const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
+    await ps;
+    ModelingEvents.State.Attribute.updated(window, this.actionSelected);
   }
 
   _projectDblclickHandler() {
@@ -672,6 +756,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     ${this._modelDetailsEditorTemplate()}
     ${this._entityDetailsViewTemplate()}
     ${this._entityDetailsEditorTemplate()}
+    ${this._attributeEditorTemplate()}
     `;
   }
 
@@ -917,7 +1002,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></entity-details-view>
       <anypoint-button
         data-property="entityDetailsOpened"
-        @click="${this._deleteModelHandler}"
+        @click="${this._deleteEntityHandler}"
         slot="action"
       >Delete</anypoint-button>
       <div class="flex-last" slot="action">
@@ -956,14 +1041,14 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></entity-editor>
       <anypoint-button
         data-property="entityEditorOpened"
-        @click="${this._deleteModelHandler}"
+        @click="${this._deleteEntityHandler}"
         slot="action"
       >Delete</anypoint-button>
       <anypoint-button
         slot="action"
         class="flex-last"
         emphasis="high"
-        @click="${this._saveModelHandler}"
+        @click="${this._saveEntityHandler}"
       >Save</anypoint-button>
     </editor-drawer>`;
   }
@@ -975,5 +1060,37 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       <progress></progress>
     </div>
     `;
+  }
+
+  _attributeEditorTemplate() {
+    const {
+      compatibility,
+      attributeEditorOpened,
+      attributeSelected,
+    } = this;
+    const opened = !!attributeSelected && !!attributeEditorOpened;
+    return html`<editor-drawer
+      .opened="${opened}"
+      @openedchange="${this._drawerOpenedHandler}"
+      data-property="attributeEditorOpened"
+    >
+      <h5 slot="title">Edit attribute</h5>
+      <attribute-editor
+        .attributeId="${attributeSelected}"
+        ?compatibility="${compatibility}"
+        class=""
+      ></attribute-editor>
+      <anypoint-button
+        data-property="attributeEditorOpened"
+        @click="${this._deleteAttributeHandler}"
+        slot="action"
+      >Delete</anypoint-button>
+      <anypoint-button
+        slot="action"
+        class="flex-last"
+        emphasis="high"
+        @click="${this._saveAttributeHandler}"
+      >Save</anypoint-button>
+    </editor-drawer>`;
   }
 }
