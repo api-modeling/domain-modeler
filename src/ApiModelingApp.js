@@ -86,7 +86,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       projectNameEditor: { type: Boolean },
       actionSelected:  { type: String },
       actionSelectedType:  { type: String },
-      attributeSelected:  { type: String },
+      attributeSelected: { type: String },
+      moduleSelected: { type: String },
     };
   }
 
@@ -134,7 +135,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.entityEditorOpened = false;
     this.projectNameEditor = false;
     this.attributeEditorOpened = false;
-    this.attributeSelected = null
+    this.attributeSelected = null;
+    this.moduleSelected = null;
 
     this.store = new ModelingFrontStore();
     this.persistence = new StorePersistenceApi(this.store);
@@ -208,13 +210,14 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   }
 
   _processViewAction(property, selected) {
-    this.actionSelected = selected;
     this.actionSelectedType = property;
     switch (property) {
       case 'module':
+        this.moduleSelected = selected;
         this.moduleDetailsOpened = true;
         break;
       case 'data-model':
+        this.actionSelected = selected;
         this.modelDetailsOpened = true;
         break;
       default:
@@ -224,7 +227,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   _processEditAction(property, selected) {
     switch (property) {
       case 'module':
-        this.actionSelected = selected;
+        this.moduleSelected = selected;
         this.actionSelectedType = property;
         this.moduleEditorOpened = true;
         break;
@@ -476,7 +479,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       return;
     }
     this._closeDrawerHandler(e);
-    await this.store.removeModule(this.actionSelected);
+    await this.store.removeModule(this.moduleSelected);
   }
 
   async _deleteModelHandler(e) {
@@ -520,10 +523,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     if (!changes.length) {
       return;
     }
-    // @ts-ignore
-    const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
-    await ps;
-    ModelingEvents.State.Module.updated(window, this.actionSelected);
+    await this.store.patchModule(changes, this.moduleSelected);
+    ModelingEvents.State.Module.updated(window, this.moduleSelected);
   }
 
   async _saveModelHandler(e) {
@@ -578,9 +579,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       return;
     }
     // @ts-ignore
-    const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
+    const ps = changes.map((change) => MetaStore.patchThis(change, this.attributeSelected));
     await ps;
-    ModelingEvents.State.Attribute.updated(window, this.actionSelected);
+    ModelingEvents.State.Attribute.updated(window, this.attributeSelected);
   }
 
   _projectDblclickHandler() {
@@ -715,6 +716,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.project = null;
     this.projectId = null;
     this.dataModelId = null;
+    this.moduleSelected = null;
+    this.attributeSelected = null;
   }
 
   /**
@@ -837,9 +840,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       compatibility,
       moduleDetailsOpened,
       actionSelectedType,
-      actionSelected,
+      moduleSelected,
     } = this;
-    const moduleId = actionSelectedType === 'module' ? actionSelected : undefined;
+    const moduleId = actionSelectedType === 'module' ? moduleSelected : undefined;
     const opened = !!moduleId && moduleDetailsOpened;
     return html`<editor-drawer
       ?opened="${opened}"
@@ -877,9 +880,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       compatibility,
       moduleEditorOpened,
       actionSelectedType,
-      actionSelected,
+      moduleSelected,
     } = this;
-    const moduleId = actionSelectedType === 'module' ? actionSelected : undefined;
+    const moduleId = actionSelectedType === 'module' ? moduleSelected : undefined;
     const opened = !!moduleId && !!moduleEditorOpened;
     return html`<editor-drawer
       .opened="${opened}"
