@@ -42,6 +42,7 @@ import ModelingAlertDialog from './packages/helpers/modeling-alert-dialog.js';
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateDataModelCreateEvent} DomainStateDataModelCreateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateDataModelUpdateEvent} DomainStateDataModelUpdateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateDataModelDeleteEvent} DomainStateDataModelDeleteEvent */
+/** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAttributeCreateEvent} DomainStateAttributeCreateEvent */
 /** @typedef {import('@anypoint-web-components/anypoint-input').AnypointInput} AnypointInput */
 
 const projectIdValue = Symbol('projectIdValue');
@@ -53,6 +54,7 @@ const modelAddHandler = Symbol('modelAddHandler');
 const modelDeleteHandler = Symbol('modelDeleteHandler');
 const modelUpdateHandler = Symbol('modelUpdateHandler');
 const unhandledRejectionHandler = Symbol('unhandledRejectionHandler');
+const entityAddHandler = Symbol('entityAddHandler');
 
 export class ApiModelingApp extends ModuleMixin(LitElement) {
   static get styles() {
@@ -152,6 +154,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this[modelAddHandler] = this[modelAddHandler].bind(this);
     this[modelUpdateHandler] = this[modelUpdateHandler].bind(this);
     this[modelDeleteHandler] = this[modelDeleteHandler].bind(this);
+    this[entityAddHandler] = this[entityAddHandler].bind(this);
 
     window.onunhandledrejection = this[unhandledRejectionHandler].bind(this);
   }
@@ -168,6 +171,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     window.addEventListener(ModelingEventTypes.State.Model.created, this[modelAddHandler]);
     window.addEventListener(ModelingEventTypes.State.Model.updated, this[modelUpdateHandler]);
     window.addEventListener(ModelingEventTypes.State.Model.deleted, this[modelDeleteHandler]);
+    window.addEventListener(ModelingEventTypes.State.Entity.created, this[entityAddHandler]);
   }
 
   [unhandledRejectionHandler](e) {
@@ -254,7 +258,10 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.route = 'model';
     this.actionSelected = id;
     this.actionSelectedType = 'entity';
-    this.entityDetailsOpened = true;
+    if (!this.entityEditorOpened) {
+      this.entityDetailsOpened = true;
+    }
+    this.attributeEditorOpened = false;
   }
 
   async _selectDataModel(id) {
@@ -415,6 +422,15 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.requestUpdate();
   }
 
+  /**
+   * @param {DomainStateAttributeCreateEvent} e
+   */
+  async [entityAddHandler](e) {
+    this.entityEditorOpened = true;
+    this.actionSelectedType = 'entity';
+    this.actionSelected = e.detail.id;
+  }
+
   _newProjectRequestHandler() {
     this.renderNameDialog = true;
   }
@@ -524,7 +540,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       return;
     }
     await this.store.patchModule(changes, this.moduleSelected);
-    ModelingEvents.State.Module.updated(window, this.moduleSelected);
+    // ModelingEvents.State.Module.updated(window, this.moduleSelected);
   }
 
   async _saveModelHandler(e) {
@@ -541,10 +557,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     if (!changes.length) {
       return;
     }
-    // @ts-ignore
-    const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
-    await ps;
-    ModelingEvents.State.Module.updated(window, this.actionSelected);
+    this.store.patchModule(changes, this.actionSelected);
   }
 
   async _saveEntityHandler(e) {
@@ -561,10 +574,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     if (!changes.length) {
       return;
     }
-    // @ts-ignore
-    const ps = changes.map((change) => MetaStore.patchThis(change, this.actionSelected));
-    await ps;
-    ModelingEvents.State.Entity.updated(window, this.actionSelected);
+    this.store.patchEntity(changes, this.actionSelected);
   }
 
   async _saveAttributeHandler(e) {
@@ -573,15 +583,10 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       return;
     }
     this.attributeEditorOpened = false;
-    const changes = editor.changelog();
-
-    if (!changes.length) {
-      return;
+    const { type, changelog } = editor.changelog();
+    if (type === 'properties') {
+      this.store.patchAttribute(changelog, this.attributeSelected);
     }
-    // @ts-ignore
-    const ps = changes.map((change) => MetaStore.patchThis(change, this.attributeSelected));
-    await ps;
-    ModelingEvents.State.Attribute.updated(window, this.attributeSelected);
   }
 
   _projectDblclickHandler() {
@@ -625,7 +630,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
     return html`
     <anypoint-dialog ?compatibility="${compatibility}" opened>
-      <h2>Add new project</h2>
+      <h2 class="title">Add new project</h2>
       <div>
         <anypoint-input
           class="project-input"

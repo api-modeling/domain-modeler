@@ -16,6 +16,12 @@ h2 {
   color: var(--theme-h1-color, currentColor);
 }
 
+h2.title {
+  font-size: 1.25rem;
+  line-height: 2rem;
+  font-weight: 500;
+}
+
 .title-line {
   padding: 60px 0;
   margin: 0;

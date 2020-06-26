@@ -52,7 +52,7 @@
     "@api-modeling/modeling-events": "^0.2.6",
     "@api-modeling/modeling-front-store": "^0.2.3",
     "@api-modeling/modeling-icons": "^0.1.4",
-    "@api-modeling/modeling-project-ui": "^0.1.5",
+    "@api-modeling/modeling-project-ui": "^0.1.7",
     "@github/time-elements": "^3.1.1",
     "@open-wc/scoped-elements": "^1.1.1",
     "@types/pouchdb": "^6.4.0",

@@ -66,8 +66,8 @@ export class PageModelDesigner extends LitElement {
     this.compatibility = false;
   }
 
-  _addEntityHandler() {
-    ModelingEvents.Entity.create(this, this.dataModelId);
+  async _addEntityHandler() {
+    await ModelingEvents.Entity.create(this, this.dataModelId);
   }
 
   render() {
