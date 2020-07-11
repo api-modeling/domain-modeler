@@ -247,6 +247,15 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
         this.dataModelSelected = selected;
         this.modelDetailsOpened = true;
         break;
+      case 'attribute':
+        // @todo: have a separate view just for the attribute details
+        this.attributeSelected = selected;
+        this.attributeEditorOpened = true;
+        break;
+      case 'entity':
+        this.entitySelected = selected;
+        this.entityDetailsOpened = true;
+        break;
       default:
     }
   }
@@ -286,10 +295,10 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.modelEditorOpened = false;
     this.entityEditorOpened = false;
 
-    this.entitySelected = null;
-    this.dataModelSelected = null;
-    this.attributeSelected = null;
-    this.associationSelected = null;
+    // this.entitySelected = null;
+    // this.dataModelSelected = null;
+    // this.attributeSelected = null;
+    // this.associationSelected = null;
   }
 
   async _selectModule(id) {
@@ -304,16 +313,12 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.clearEditorSelectionState();
     this.route = 'model';
     this.entitySelected = id;
-    // @todo(pawel): this is temporary until the visual editor is here
-    this.entityDetailsOpened = true;
   }
 
   async _selectDataModel(id) {
     this.clearEditorSelectionState();
     this.route = 'model';
     this.dataModelSelected = id;
-    // @todo(pawel): this is temporary until the visual editor is here
-    this.modelDetailsOpened = true;
   }
 
   async _deleteModule(id) {
