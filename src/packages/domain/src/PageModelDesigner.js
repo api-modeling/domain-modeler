@@ -9,6 +9,8 @@ import { EntityMixin, AttributeMixin } from '@api-modeling/modeling-amf-mixin';
 /** @typedef {import('@api-modeling/modeling-amf-mixin').DataModelInstance} DataModelInstance */
 /** @typedef {import('@api-modeling/modeling-visualization').ModelingCanvasElement} ModelingCanvasElement */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateEntityCreateEvent} DomainStateEntityCreateEvent */
+/** @typedef {import('@api-modeling/modeling-events').Events.DomainStateEntityDeleteEvent} DomainStateEntityDeleteEvent */
+/** @typedef {import('@api-modeling/modeling-events').Events.DomainNavigationEvent} DomainNavigationEvent */
 
 const dataModelIdValue = Symbol('dataModelIdValue');
 const requestModel = Symbol('requestModel');
@@ -21,6 +23,8 @@ const fabTemplate = Symbol('fabTemplate');
 const zoomInHandler = Symbol('zoomInHandler');
 const zoomOutHandler = Symbol('zoomOutHandler');
 const entityAddHandler = Symbol('entityAddHandler');
+const entityDeleteHandler = Symbol('entityDeleteHandler');
+const navigationHandler = Symbol('navigationHandler');
 
 export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
   static get styles() {
@@ -114,22 +118,27 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     this.dataModelId = null;
     this.compatibility = false;
     this[entityAddHandler] = this[entityAddHandler].bind(this);
+    this[entityDeleteHandler] = this[entityDeleteHandler].bind(this);
+    this[navigationHandler] = this[navigationHandler].bind(this);
   }
 
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener(ModelingEventTypes.State.Entity.created, this[entityAddHandler]);
+    window.addEventListener(ModelingEventTypes.State.Entity.deleted, this[entityDeleteHandler]);
+    window.addEventListener(ModelingEventTypes.State.Navigation.change, this[navigationHandler]);
 
     const { dataModelId } = this;
     if (dataModelId && !this[modelValue]) {
       this[requestModel](dataModelId);
     }
-
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener(ModelingEventTypes.State.Entity.created, this[entityAddHandler]);
+    window.removeEventListener(ModelingEventTypes.State.Entity.deleted, this[entityDeleteHandler]);
+    window.removeEventListener(ModelingEventTypes.State.Navigation.change, this[navigationHandler]);
   }
 
   async _addEntityHandler() {
@@ -187,6 +196,49 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
       '@id': id,
     });
     this.requestUpdate();
+  }
+
+  /**
+   * @param {DomainStateEntityDeleteEvent} e
+   */
+  [entityDeleteHandler](e) {
+    const { id } = e.detail;
+    if (!this[entitiesValue]) {
+      return;
+    }
+    const index = this[entitiesValue].findIndex((item) => item['@id'] === id);
+    if (index === -1) {
+      return;
+    }
+    this[entitiesValue].splice(index, 1);
+    this.requestUpdate();
+  }
+
+  /**
+   * @poaram {DomainNavigationEvent} e
+   */
+  [navigationHandler](e) {
+    const { selected, type } = e.detail;
+    if (type === 'entity') {
+      this.selectEntity(selected);
+    }
+  }
+
+  /**
+   * Sets selected state on an entity
+   *
+   * @param {string} id The ID of the entity to select.
+   */
+  selectEntity(id) {
+    if (!this[entitiesValue]) {
+      return;
+    }
+    const index = this[entitiesValue].findIndex((item) => item['@id'] === id);
+    if (index === -1) {
+      return;
+    }
+    // @ts-ignore
+    this.canvas.selected = index;
   }
 
   render() {

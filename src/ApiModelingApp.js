@@ -216,13 +216,13 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   }
 
   _navigationHandler(e) {
-    const { selected, type } = e.detail;
+    const { selected, type, parent } = e.detail;
     if (type === 'module') {
       this._selectModule(selected);
     } else if (type === 'data-model') {
       this._selectDataModel(selected);
     } else if (type === 'entity') {
-      this._selectEntity(selected);
+      this._selectEntity(selected, parent);
     }
   }
 
@@ -247,14 +247,14 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
         this.dataModelSelected = selected;
         this.modelDetailsOpened = true;
         break;
+      case 'entity':
+        this.entitySelected = selected;
+        this.entityDetailsOpened = true;
+        break;
       case 'attribute':
         // @todo: have a separate view just for the attribute details
         this.attributeSelected = selected;
         this.attributeEditorOpened = true;
-        break;
-      case 'entity':
-        this.entitySelected = selected;
-        this.entityDetailsOpened = true;
         break;
       default:
     }
@@ -269,6 +269,10 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       case 'data-model':
         this.dataModelSelected = selected;
         this.modelEditorOpened = true;
+        break;
+      case 'entity':
+        this.entitySelected = selected;
+        this.entityEditorOpened = true;
         break;
       case 'attribute':
         this.attributeSelected = selected;
@@ -285,6 +289,10 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   _processDeleteAction(property, selected) {
     switch (property) {
       case 'module': this._deleteModule(selected); break;
+      case 'data-model': this._deleteModel(selected); break;
+      case 'entity': this._deleteEntity(selected); break;
+      case 'attribute': this._deleteAttribute(selected); break;
+      case 'association': this._deleteAssociation(selected); break;
       default:
     }
   }
@@ -309,10 +317,19 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.moduleId = id;
   }
 
-  async _selectEntity(id) {
+  /**
+   * Selects an entity as a current selection.
+   * @param {string} id The id of the entity to select
+   * @param {string=} parent Optional parent
+   * @return {Promise<void>}
+   */
+  async _selectEntity(id, parent) {
     this.clearEditorSelectionState();
     this.route = 'model';
     this.entitySelected = id;
+    if (parent && parent !== this.dataModelSelected) {
+      this.dataModelSelected = parent;
+    }
   }
 
   async _selectDataModel(id) {
@@ -325,6 +342,40 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     await this.store.removeModule(id);
     if (this.moduleId === id) {
       this.moduleId = this.rootModuleId;
+    }
+  }
+
+  async _deleteModel(id) {
+    await this.store.removeDataModel(id);
+    if (this.dataModelSelected === id) {
+      this.dataModelSelected = undefined;
+      this.modelEditorOpened = false;
+      this.modelDetailsOpened = false;
+    }
+  }
+
+  async _deleteAttribute(id) {
+    await this.store.removeAttribute(id);
+    if (this.attributeSelected === id) {
+      this.attributeSelected = undefined;
+      this.attributeEditorOpened = false;
+    }
+  }
+
+  async _deleteEntity(id) {
+    await this.store.removeEntity(id);
+    if (this.entitySelected === id) {
+      this.entitySelected = undefined;
+      this.entityEditorOpened = false;
+      this.entityDetailsOpened = false;
+    }
+  }
+
+  async _deleteAssociation(id) {
+    await this.store.removeAssociation(id);
+    if (this.associationSelected === id) {
+      this.associationSelected = undefined;
+      this.associationEditorOpened = false;
     }
   }
 
@@ -583,8 +634,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       return;
     }
     this._closeDrawerHandler(e);
-    await this.store.removeDataModel(dataModelSelected);
-    this.dataModelSelected = null;
+    await this._deleteModel(dataModelSelected);
   }
 
   async _deleteEntityHandler(e) {
@@ -605,8 +655,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
   async _deleteAssociationHandler(e) {
     this._closeDrawerHandler(e);
-    await this.store.removeAssociation(this.associationSelected);
-    this.associationSelected = null;
+    await this._deleteAssociation(this.associationSelected);
   }
 
   _editSelectedHandler(e) {
