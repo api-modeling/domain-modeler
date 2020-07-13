@@ -768,8 +768,14 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       this.projectId = await factory.processImport(content, type);
       this.route = 'domain';
       this.persistence.storeState();
-    } catch (_) {
-      // ...
+    } catch (cause) {
+      const dialog = new ModelingAlertDialog();
+      dialog.message = cause.message;
+      // @ts-ignore
+      dialog.choices = ['Dismiss'];
+      // @ts-ignore
+      dialog.open();
+      this.route = 'start';
     }
   }
 
