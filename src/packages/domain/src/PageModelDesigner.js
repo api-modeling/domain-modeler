@@ -3,20 +3,37 @@ import '@anypoint-web-components/anypoint-button/anypoint-icon-button.js';
 import '@api-modeling/modeling-icons/modeling-icon.js';
 import '@api-modeling/modeling-visualization/modeling-canvas.js';
 import '@api-modeling/modeling-visualization/modeling-canvas-entity.js';
+import '@api-modeling/modeling-visualization/modeling-canvas-external-entity.js';
 import { ModelingEvents, ModelingEventTypes } from  '@api-modeling/modeling-events';
 import { EntityMixin, AttributeMixin } from '@api-modeling/modeling-amf-mixin';
 
 /** @typedef {import('@api-modeling/modeling-amf-mixin').DataModelInstance} DataModelInstance */
+/** @typedef {import('@api-modeling/modeling-amf-mixin').EntityInstance} EntityInstance */
 /** @typedef {import('@api-modeling/modeling-visualization').ModelingCanvasElement} ModelingCanvasElement */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateEntityCreateEvent} DomainStateEntityCreateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateEntityDeleteEvent} DomainStateEntityDeleteEvent */
+/** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationCreateEvent} DomainStateAssociationCreateEvent */
+/** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationDeleteEvent} DomainStateAssociationDeleteEvent */
+/** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationUpdateEvent} DomainStateAssociationUpdateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainNavigationEvent} DomainNavigationEvent */
+/**
+ * @typedef {object} LinkItem
+ * @property {string} id The id of the association
+ * @property {string} target The id of the association target
+ */
+/**
+ * @typedef {object} EntityItem
+ * @property {string} entity The id of the entity
+ * @property {LinkItem[]} links The list of associations
+ */
 
 const dataModelIdValue = Symbol('dataModelIdValue');
 const requestModel = Symbol('requestModel');
 const entitiesValue = Symbol('entitiesValue');
+const externalEntitiesValue = Symbol('externalEntitiesValue');
 const modelValue = Symbol('modelValue');
 const entitiesTemplate = Symbol('entitiesTemplate');
+const externalEntitiesTemplate = Symbol('externalEntitiesTemplate');
 const uiControlsTemplate = Symbol('uiControlsTemplate');
 const zoomControlTemplate = Symbol('zoomControlTemplate');
 const fabTemplate = Symbol('fabTemplate');
@@ -25,6 +42,8 @@ const zoomOutHandler = Symbol('zoomOutHandler');
 const entityAddHandler = Symbol('entityAddHandler');
 const entityDeleteHandler = Symbol('entityDeleteHandler');
 const navigationHandler = Symbol('navigationHandler');
+const associationAddHandler = Symbol('associationAddHandler');
+const associationUpdateHandler = Symbol('associationUpdateHandler');
 
 export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
   static get styles() {
@@ -120,12 +139,16 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     this[entityAddHandler] = this[entityAddHandler].bind(this);
     this[entityDeleteHandler] = this[entityDeleteHandler].bind(this);
     this[navigationHandler] = this[navigationHandler].bind(this);
+    this[associationAddHandler] = this[associationAddHandler].bind(this);
+    this[associationUpdateHandler] = this[associationUpdateHandler].bind(this);
   }
 
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener(ModelingEventTypes.State.Entity.created, this[entityAddHandler]);
     window.addEventListener(ModelingEventTypes.State.Entity.deleted, this[entityDeleteHandler]);
+    window.addEventListener(ModelingEventTypes.State.Association.created, this[associationAddHandler]);
+    window.addEventListener(ModelingEventTypes.State.Association.updated, this[associationUpdateHandler]);
     window.addEventListener(ModelingEventTypes.State.Navigation.change, this[navigationHandler]);
 
     const { dataModelId } = this;
@@ -138,6 +161,8 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     super.disconnectedCallback();
     window.removeEventListener(ModelingEventTypes.State.Entity.created, this[entityAddHandler]);
     window.removeEventListener(ModelingEventTypes.State.Entity.deleted, this[entityDeleteHandler]);
+    window.removeEventListener(ModelingEventTypes.State.Association.created, this[associationAddHandler]);
+    window.removeEventListener(ModelingEventTypes.State.Association.updated, this[associationUpdateHandler]);
     window.removeEventListener(ModelingEventTypes.State.Navigation.change, this[navigationHandler]);
   }
 
@@ -159,14 +184,70 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     this.loading = true;
     try {
       const model = await ModelingEvents.Model.read(this, id);
-      const entities = this._getValueArray(model, this.ns.aml.vocabularies.dataModel.entities);
-      this[entitiesValue] = entities;
-      this[modelValue] = model;
+      const entities = /** @type EntityInstance[] */ (this._getValueArray(model, this.ns.aml.vocabularies.dataModel.entities));
+      await this.setEntitiesData(entities);
     } catch (e) {
       ModelingEvents.Reporting.error(this, e, 'Unable to read data model definition.', 'module-designer');
     }
     this.loading = false;
     this.requestUpdate();
+  }
+
+  /**
+   * Processes entities data and sets the values in the element state to render.
+   *
+   * This function takes care of listing external entities (from another data model or a module)
+   * found in the associations.
+   *
+   * @param {EntityInstance[]} entities
+   * @return {Promise<void>}
+   */
+  async setEntitiesData(entities) {
+    if (!entities.length) {
+      this[entitiesValue] = undefined;
+      this[externalEntitiesValue] = undefined;
+      return;
+    }
+
+    const models = await ModelingEvents.Entity.readBulk(this, entities.map((entity) => entity['@id']));
+    const datamodelEntities = [];
+    const result = [];
+    for (let i = 0, len = models.length; i < len; i++) {
+      const group = models[i];
+      const entity = entities[i]['@id'];
+      datamodelEntities.push(entity);
+      const item = /** @type EntityItem */ ({
+        entity,
+        links:  /** @type LinkItem[] */ ([]),
+      });
+
+      for (let j = 0, groupLen = group.length; j < groupLen; j++) {
+        const gitem = group[j];
+        if (this._hasType(gitem, this.ns.aml.vocabularies.dataModel.AssociationProperty)) {
+          const target = this._getLinkValue(gitem, this.ns.aml.vocabularies.dataModel.target);
+          if (target) {
+            item.links[item.links.length] = /** @type LinkItem */ ({
+              id: gitem['@id'],
+              target,
+            });
+          }
+        }
+      }
+      result[result.length] = item;
+    }
+    // now since all entities are accounted for we can compute the external to this data model entities
+    const externalEntities = [];
+    result.forEach((item) => {
+      const { links } = item;
+      links.forEach((link) => {
+        const { target } = link;
+        if (!datamodelEntities.includes(target)) {
+          externalEntities.push(target);
+        }
+      });
+    });
+    this[entitiesValue] = result;
+    this[externalEntitiesValue] = externalEntities;
   }
 
   [zoomInHandler]() {
@@ -190,11 +271,13 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
       return;
     }
     if (!this[entitiesValue]) {
-      this[entitiesValue] = [];
+      this[entitiesValue] = /** @type EntityItem[] */ ([]);
     }
-    this[entitiesValue].push({
-      '@id': id,
+    const item = /** @type EntityItem */ ({
+      entity: id,
+      links: [],
     });
+    this[entitiesValue].push(item);
     this.requestUpdate();
   }
 
@@ -203,14 +286,74 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
    */
   [entityDeleteHandler](e) {
     const { id } = e.detail;
-    if (!this[entitiesValue]) {
-      return;
-    }
-    const index = this[entitiesValue].findIndex((item) => item['@id'] === id);
+    const items = /** @type EntityItem[] */ (this[entitiesValue] || []);
+    const index = items.findIndex((item) => item.entity === id);
     if (index === -1) {
       return;
     }
     this[entitiesValue].splice(index, 1);
+    this.requestUpdate();
+  }
+
+  /**
+   * @param {DomainStateAssociationCreateEvent} e
+   */
+  async [associationAddHandler](e) {
+    const { id, parent } = e.detail;
+    const entities = /** @type EntityItem[] */ (this[entitiesValue] || []);
+    let entityLinks;
+    for (let i = 0, len = entities.length; i < len; i++) {
+      const { entity, links } = entities[i];
+      if (entity === parent) {
+        entityLinks = links;
+        break;
+      }
+    }
+    if (!entityLinks) {
+      return;
+    }
+    const assoc = await ModelingEvents.Association.read(this, id);
+    const target = this._getLinkValue(assoc, this.ns.aml.vocabularies.dataModel.target);
+    if (target) {
+      entityLinks.push({
+        id,
+        target,
+      });
+    }
+  }
+
+  /**
+   * @param {DomainStateAssociationUpdateEvent} e
+   */
+  async [associationUpdateHandler](e) {
+    const { id } = e.detail;
+    const entities = /** @type EntityItem[] */ (this[entitiesValue] || []);
+    let entity;
+    let linkIndex;
+    for (let i = 0, len = entities.length; i < len; i++) {
+      const { links } = entities[i];
+      linkIndex = links.findIndex((link) => link.id === id);
+      if (linkIndex !== -1) {
+        entity = entities[i];
+        break;
+      }
+    }
+    if (!entity) {
+      return;
+    }
+    const assoc = await ModelingEvents.Association.read(this, id);
+    const target = this._getLinkValue(assoc, this.ns.aml.vocabularies.dataModel.target);
+    if (target) {
+      return;
+    }
+    if (linkIndex === -1) {
+      entity.links.push({
+        id,
+        target,
+      });
+    } else {
+      entity.links[linkIndex].target = target;
+    }
     this.requestUpdate();
   }
 
@@ -230,10 +373,8 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
    * @param {string} id The ID of the entity to select.
    */
   selectEntity(id) {
-    if (!this[entitiesValue]) {
-      return;
-    }
-    const index = this[entitiesValue].findIndex((item) => item['@id'] === id);
+    const items = /** @type EntityItem[] */ (this[entitiesValue] || []);
+    const index = items.findIndex((item) => item.entity === id);
     if (index === -1) {
       return;
     }
@@ -252,6 +393,7 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
         ?compatibility="${compatibility}"
       >
         ${this[entitiesTemplate]()}
+        ${this[externalEntitiesTemplate]()}
       </modeling-canvas>
       ${this[uiControlsTemplate]()}
     `;
@@ -307,13 +449,27 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
 
   [entitiesTemplate]() {
     const { compatibility } = this;
-    const entities = this[entitiesValue] || [];
+    const entities = /** @type EntityItem[] */ (this[entitiesValue] || []);
     if (!entities.length) {
       return '';
     }
     return entities.map((item) => html`<modeling-canvas-entity
       ?compatibility="${compatibility}"
-      .domainId="${item['@id']}"
+      .domainId="${item.entity}"
+      interactive
     ></modeling-canvas-entity>`);
+  }
+
+  [externalEntitiesTemplate]() {
+    const { compatibility } = this;
+    const entities = /** @type string[] */ (this[externalEntitiesValue] || []);
+    if (!entities.length) {
+      return '';
+    }
+    return entities.map((item) => html`
+    <modeling-canvas-external-entity
+      ?compatibility="${compatibility}"
+      .domainId="${item}"
+    ></modeling-canvas-external-entity>`);
   }
 }
