@@ -6,26 +6,20 @@ import '@api-modeling/modeling-visualization/modeling-canvas-entity.js';
 import '@api-modeling/modeling-visualization/modeling-canvas-external-entity.js';
 import { ModelingEvents, ModelingEventTypes } from  '@api-modeling/modeling-events';
 import { EntityMixin, AttributeMixin } from '@api-modeling/modeling-amf-mixin';
+import { computeDataModelEntities, computeExternalDataModelEntities } from '@api-modeling/modeling-visualization';
 
 /** @typedef {import('@api-modeling/modeling-amf-mixin').DataModelInstance} DataModelInstance */
 /** @typedef {import('@api-modeling/modeling-amf-mixin').EntityInstance} EntityInstance */
 /** @typedef {import('@api-modeling/modeling-visualization').ModelingCanvasElement} ModelingCanvasElement */
+/** @typedef {import('@api-modeling/modeling-visualization').EntityItem} EntityItem */
+/** @typedef {import('@api-modeling/modeling-visualization').ExternalEntity} ExternalEntity */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateEntityCreateEvent} DomainStateEntityCreateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateEntityDeleteEvent} DomainStateEntityDeleteEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationCreateEvent} DomainStateAssociationCreateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationDeleteEvent} DomainStateAssociationDeleteEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationUpdateEvent} DomainStateAssociationUpdateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainNavigationEvent} DomainNavigationEvent */
-/**
- * @typedef {object} LinkItem
- * @property {string} id The id of the association
- * @property {string} target The id of the association target
- */
-/**
- * @typedef {object} EntityItem
- * @property {string} entity The id of the entity
- * @property {LinkItem[]} links The list of associations
- */
+
 
 const dataModelIdValue = Symbol('dataModelIdValue');
 const requestModel = Symbol('requestModel');
@@ -185,7 +179,7 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     try {
       const model = await ModelingEvents.Model.read(this, id);
       const entities = /** @type EntityInstance[] */ (this._getValueArray(model, this.ns.aml.vocabularies.dataModel.entities));
-      await this.setEntitiesData(entities);
+      await this.setEntitiesData(id, entities);
     } catch (e) {
       ModelingEvents.Reporting.error(this, e, 'Unable to read data model definition.', 'module-designer');
     }
@@ -199,55 +193,21 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
    * This function takes care of listing external entities (from another data model or a module)
    * found in the associations.
    *
+   * @param {string} dataModelId The parent data model ID
    * @param {EntityInstance[]} entities
    * @return {Promise<void>}
    */
-  async setEntitiesData(entities) {
+  async setEntitiesData(dataModelId, entities) {
     if (!entities.length) {
       this[entitiesValue] = undefined;
       this[externalEntitiesValue] = undefined;
       return;
     }
 
-    const models = await ModelingEvents.Entity.readBulk(this, entities.map((entity) => entity['@id']));
-    const datamodelEntities = [];
-    const result = [];
-    for (let i = 0, len = models.length; i < len; i++) {
-      const group = models[i];
-      const entity = entities[i]['@id'];
-      datamodelEntities.push(entity);
-      const item = /** @type EntityItem */ ({
-        entity,
-        links:  /** @type LinkItem[] */ ([]),
-      });
-
-      for (let j = 0, groupLen = group.length; j < groupLen; j++) {
-        const gitem = group[j];
-        if (this._hasType(gitem, this.ns.aml.vocabularies.dataModel.AssociationProperty)) {
-          const target = this._getLinkValue(gitem, this.ns.aml.vocabularies.dataModel.target);
-          if (target) {
-            item.links[item.links.length] = /** @type LinkItem */ ({
-              id: gitem['@id'],
-              target,
-            });
-          }
-        }
-      }
-      result[result.length] = item;
-    }
-    // now since all entities are accounted for we can compute the external to this data model entities
-    const externalEntities = [];
-    result.forEach((item) => {
-      const { links } = item;
-      links.forEach((link) => {
-        const { target } = link;
-        if (!datamodelEntities.includes(target)) {
-          externalEntities.push(target);
-        }
-      });
-    });
-    this[entitiesValue] = result;
-    this[externalEntitiesValue] = externalEntities;
+    const dmEntities = await computeDataModelEntities(this, dataModelId, entities);
+    const exEntities = computeExternalDataModelEntities(dmEntities);
+    this[entitiesValue] = dmEntities;
+    this[externalEntitiesValue] = exEntities;
   }
 
   [zoomInHandler]() {
@@ -302,10 +262,12 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     const { id, parent } = e.detail;
     const entities = /** @type EntityItem[] */ (this[entitiesValue] || []);
     let entityLinks;
+    let entityId;
     for (let i = 0, len = entities.length; i < len; i++) {
       const { entity, links } = entities[i];
       if (entity === parent) {
         entityLinks = links;
+        entityId = entity;
         break;
       }
     }
@@ -318,6 +280,8 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
       entityLinks.push({
         id,
         target,
+        source: entityId,
+        model: parent,
       });
     }
   }
@@ -350,6 +314,8 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
       entity.links.push({
         id,
         target,
+        source: entity.entity,
+        model: this.dataModelId,
       });
     } else {
       entity.links[linkIndex].target = target;
@@ -462,14 +428,17 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
 
   [externalEntitiesTemplate]() {
     const { compatibility } = this;
-    const entities = /** @type string[] */ (this[externalEntitiesValue] || []);
+    const entities = /** @type ExternalEntity[] */ (this[externalEntitiesValue] || []);
     if (!entities.length) {
       return '';
     }
     return entities.map((item) => html`
     <modeling-canvas-external-entity
       ?compatibility="${compatibility}"
-      .domainId="${item}"
+      .domainId="${item.domainId}"
+      .dataModel="${item.model}"
+      .associations="${item.associations}"
+      interactive
     ></modeling-canvas-external-entity>`);
   }
 }
