@@ -38,6 +38,10 @@ const entityDeleteHandler = Symbol('entityDeleteHandler');
 const navigationHandler = Symbol('navigationHandler');
 const associationAddHandler = Symbol('associationAddHandler');
 const associationUpdateHandler = Symbol('associationUpdateHandler');
+const zoomValue = Symbol('zoomValue');
+const zoomHandler = Symbol('zoomHandler');
+const notifyZoom = Symbol('notifyZoom');
+const zoomTimeout = Symbol('zoomTimeout');
 
 export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
   static get styles() {
@@ -95,6 +99,7 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     return {
       compatibility: { type: Boolean },
       dataModelId: { type: String },
+      zoom: { type: Number },
     };
   }
 
@@ -125,10 +130,23 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     return this.shadowRoot.querySelector('modeling-canvas');
   }
 
+  get zoom() {
+    return this[zoomValue];
+  }
+
+  set zoom(value) {
+    const old = this[zoomValue];
+    if (old === value) {
+      return;
+    }
+    this[zoomValue] = value;
+    this.requestUpdate();
+  }
+
   constructor() {
     super();
     // this.dataModel = /** @type DataModelInstance */ (null);
-    this.dataModelId = null;
+    this.dataModelId = undefined;
     this.compatibility = false;
     this[entityAddHandler] = this[entityAddHandler].bind(this);
     this[entityDeleteHandler] = this[entityDeleteHandler].bind(this);
@@ -211,15 +229,15 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
   }
 
   [zoomInHandler]() {
-    const { canvas } = this;
-    const { zoom } = canvas;
-    canvas.zoom = zoom + 1;
+    const { zoom=0 } = this;
+    this.zoom = zoom + 1;
+    this[notifyZoom]();
   }
 
   [zoomOutHandler]() {
-    const { canvas } = this;
-    const { zoom } = canvas;
-    canvas.zoom = zoom - 1;
+    const { zoom=0 } = this;
+    this.zoom = zoom - 1;
+    this[notifyZoom]();
   }
 
   /**
@@ -334,6 +352,24 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
   }
 
   /**
+   * @param {CustomEvent} e
+   */
+  [zoomHandler](e) {
+    const canvas = /** @type ModelingCanvasElement */ (e.target);
+    this[zoomValue] = canvas.zoom;
+    this[notifyZoom]();
+  }
+
+  [notifyZoom]() {
+    if (this[zoomTimeout]) {
+      clearTimeout(this[zoomTimeout]);
+    }
+    this[zoomTimeout] = setTimeout(() => {
+      this.dispatchEvent(new CustomEvent('zoomchange'));
+    }, 10);
+  }
+
+  /**
    * Sets selected state on an entity
    *
    * @param {string} id The ID of the entity to select.
@@ -351,12 +387,14 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
   render() {
     const {
       compatibility,
+      zoom,
     } = this;
-
     return html`
       <modeling-canvas
         class="canvas"
         ?compatibility="${compatibility}"
+        .zoom="${zoom}"
+        @zoomchange="${this[zoomHandler]}"
       >
         ${this[entitiesTemplate]()}
         ${this[externalEntitiesTemplate]()}

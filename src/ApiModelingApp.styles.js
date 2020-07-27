@@ -112,4 +112,8 @@ main {
   height: 16px;
   margin-right: 8px;
 }
+
+.zoom-input {
+  width: 92px;
+}
 `;

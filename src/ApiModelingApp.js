@@ -21,6 +21,7 @@ import '@anypoint-web-components/anypoint-menu-button/anypoint-menu-button.js';
 import '@anypoint-web-components/anypoint-button/anypoint-icon-button.js';
 import '@anypoint-web-components/anypoint-listbox/anypoint-listbox.js';
 import '@anypoint-web-components/anypoint-item/anypoint-item.js';
+import '@anypoint-web-components/anypoint-input-combobox/anypoint-input-combobox.js';
 import '@api-modeling/modeling-icons/modeling-icon.js';
 
 // pages
@@ -47,11 +48,13 @@ import ModelingAlertDialog from './packages/helpers/modeling-alert-dialog.js';
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateEntityCreateEvent} DomainStateEntityCreateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationCreateEvent} DomainStateAssociationCreateEvent */
 /** @typedef {import('@anypoint-web-components/anypoint-input').AnypointInput} AnypointInput */
+/** @typedef {import('@anypoint-web-components/anypoint-input-combobox').AnypointInputComboboxElement} AnypointInputComboboxElement */
 /** @typedef {import('@api-modeling/modeling-editors-ui').AssociationEditorElement} AssociationEditorElement */
 /** @typedef {import('@api-modeling/modeling-editors-ui').EntityEditorElement} EntityEditorElement */
 /** @typedef {import('@api-modeling/modeling-editors-ui').ModuleDetailsEditorElement} ModuleDetailsEditorElement */
 /** @typedef {import('@api-modeling/modeling-editors-ui').ModelDetailsEditorElement} ModelDetailsEditorElement */
 /** @typedef {import('@api-modeling/modeling-editors-ui').AttributeEditorElement} AttributeEditorElement */
+/** @typedef {import('./packages/domain').PageModelDesigner} PageModelDesigner */
 
 const projectIdValue = Symbol('projectIdValue');
 const requestProject = Symbol('requestProject');
@@ -65,6 +68,13 @@ const unhandledRejectionHandler = Symbol('unhandledRejectionHandler');
 const entityAddHandler = Symbol('entityAddHandler');
 const attributeAddHandler = Symbol('attributeAddHandler');
 const associationAddHandler = Symbol('associationAddHandler');
+const zoomSelectionTemplate = Symbol('zoomSelectionTemplate');
+const canvasZoomHandler = Symbol('canvasZoomHandler');
+const zoomInputHandler = Symbol('zoomInputHandler');
+
+const zoomValues = ['25%', '33%', '50%', '100%', '150%', '200%', '300%', '400%'];
+// the 100% of the scale in the zoom dropdown represents this many zoom levels
+const zoomFactor = 32;
 
 export class ApiModelingApp extends ModuleMixin(LitElement) {
   static get styles() {
@@ -103,6 +113,8 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       moduleSelected: { type: String },
       entitySelected: { type: String },
       dataModelSelected: { type: String },
+      zoomInputValue: { type: Number },
+      zoom: { type: Number },
     };
   }
 
@@ -779,75 +791,6 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  _projectCreateDialogTemplate() {
-    const { compatibility, renderNameDialog } = this;
-    if (!renderNameDialog) {
-      return '';
-    }
-    return html`
-    <anypoint-dialog ?compatibility="${compatibility}" opened>
-      <h2 class="title">Add new project</h2>
-      <div>
-        <anypoint-input
-          class="project-input"
-          name="project-name"
-          required
-          autovalidate
-          invalidmessage="A name is required"
-          ?compatibility="${compatibility}"
-        >
-          <label slot="label">Project name</label>
-        </anypoint-input>
-        <anypoint-input
-          class="project-input"
-          name="project-description"
-          ?compatibility="${compatibility}"
-        >
-          <label slot="label">Description (optional)</label>
-        </anypoint-input>
-      </div>
-      <div class="buttons">
-        <anypoint-button dialog-dismiss>Cancel</anypoint-button>
-        <anypoint-button dialog-confirm autofocus @click="${this._projectSaveHandler}">Save</anypoint-button>
-      </div>
-    </anypoint-dialog>`;
-  }
-
-  _renderPage() {
-    switch (this.route) {
-      case 'start':
-        return html`
-          <page-project-picker
-            class="page"
-            .store="${this.store}"
-            .persistence="${this.persistence}"
-            @newprojectrequested="${this._newProjectRequestHandler}"
-            @importrequested="${this._importProjectHandler}"
-            @restore="${this._restoreProjectHandler}"></page-project-picker>
-        `;
-      case 'domain':
-        return html`
-        <module-viewer
-          .moduleId="${this.moduleId || this.rootModuleId}"
-          .amf="${this.project}"
-          class="page-padding full-page"
-        ></module-viewer>
-        `;
-      case 'model':
-        return html`
-        <page-model-designer
-          .dataModelId="${this.dataModelSelected}"
-        >
-        </page-model-designer>`;
-      case 'import':
-        return html`<page-import-screen
-          class="page-padding full-page"
-          @importprocessresult="${this._fileImportHandler}"></page-import-screen>`;
-      case 'importprocessing': return this.importProcessingTemplate();
-      default: return html`Not found`;
-    }
-  }
-
   _mainMenuHandler(e) {
     const { item } = e.detail;
     if (!item) {
@@ -905,6 +848,29 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.route = 'start';
   }
 
+  [zoomInputHandler](e) {
+    const input = /** @type AnypointInputComboboxElement */ (e.target);
+    const { value } = input;
+    const match = /(\d+)/.exec(value);
+    if (!match) {
+      return;
+    }
+    const typedValue = Number(match[1]);
+    if (Number.isNaN(typedValue)) {
+      return;
+    }
+    this.zoomInputValue = typedValue;
+    const zoom = -(zoomFactor - typedValue / 100 * zoomFactor);
+    this.zoom = Math.round(zoom);
+  }
+
+  [canvasZoomHandler](e) {
+    const canvas = /** @type PageModelDesigner */ (e.target);
+    const { zoom } = canvas;
+    this.zoom = zoom;
+    this.zoomInputValue = Math.round(100 + zoom/zoomFactor * 100);
+  }
+
   render() {
     return html`
     ${this._headerTemplate()}
@@ -927,6 +893,77 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     `;
   }
 
+  _projectCreateDialogTemplate() {
+    const { compatibility, renderNameDialog } = this;
+    if (!renderNameDialog) {
+      return '';
+    }
+    return html`
+    <anypoint-dialog ?compatibility="${compatibility}" opened>
+      <h2 class="title">Add new project</h2>
+      <div>
+        <anypoint-input
+          class="project-input"
+          name="project-name"
+          required
+          autovalidate
+          invalidmessage="A name is required"
+          ?compatibility="${compatibility}"
+        >
+          <label slot="label">Project name</label>
+        </anypoint-input>
+        <anypoint-input
+          class="project-input"
+          name="project-description"
+          ?compatibility="${compatibility}"
+        >
+          <label slot="label">Description (optional)</label>
+        </anypoint-input>
+      </div>
+      <div class="buttons">
+        <anypoint-button dialog-dismiss>Cancel</anypoint-button>
+        <anypoint-button dialog-confirm autofocus @click="${this._projectSaveHandler}">Save</anypoint-button>
+      </div>
+    </anypoint-dialog>`;
+  }
+
+  _renderPage() {
+    switch (this.route) {
+      case 'start':
+        return html`
+          <page-project-picker
+            class="page"
+            .store="${this.store}"
+            .persistence="${this.persistence}"
+            @newprojectrequested="${this._newProjectRequestHandler}"
+            @importrequested="${this._importProjectHandler}"
+            @restore="${this._restoreProjectHandler}"></page-project-picker>
+        `;
+      case 'domain':
+        return html`
+        <module-viewer
+          .moduleId="${this.moduleId || this.rootModuleId}"
+          .amf="${this.project}"
+          class="page-padding full-page"
+        ></module-viewer>
+        `;
+      case 'model':
+        return html`
+        <page-model-designer
+          .zoom="${this.zoom}"
+          .dataModelId="${this.dataModelSelected}"
+          @zoomchange="${this[canvasZoomHandler]}"
+        >
+        </page-model-designer>`;
+      case 'import':
+        return html`<page-import-screen
+          class="page-padding full-page"
+          @importprocessresult="${this._fileImportHandler}"></page-import-screen>`;
+      case 'importprocessing': return this.importProcessingTemplate();
+      default: return html`Not found`;
+    }
+  }
+
   _headerTemplate() {
     const { route } = this;
     if (['domain', 'model'].indexOf(route) === -1) {
@@ -937,6 +974,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     <header>
       ${projectNameEditor ? this._projectNameEditorTemplate() : this._projectNameHeaderTemplate()}
       <span class="spacer"></span>
+      ${this[zoomSelectionTemplate]()}
       ${this._mainDropdownTemplate()}
     </header>`;
   }
@@ -1279,5 +1317,28 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
         @click="${this._saveAssociationHandler}"
       >Save</anypoint-button>
     </editor-drawer>`;
+  }
+
+  [zoomSelectionTemplate]() {
+    if (this.route !== 'model') {
+      return '';
+    }
+    const { zoomInputValue=100 } = this;
+    const value = `${zoomInputValue}`;
+    return html`
+    <anypoint-input-combobox
+      .value="${value}"
+      noLabelFloat
+      noOverlap
+      @input="${this[zoomInputHandler]}"
+      class="zoom-input"
+    >
+      <label slot="label">Zoom</label>
+      <span slot="suffix">%</span>
+      <anypoint-listbox slot="dropdown-content" tabindex="-1">
+      ${zoomValues.map((v) => html`<anypoint-item label="${v}">${v}</anypoint-item>`)}
+      </anypoint-listbox>
+    </anypoint-input-combobox>
+    `;
   }
 }
