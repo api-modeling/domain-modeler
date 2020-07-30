@@ -239,11 +239,10 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   }
 
   _modelingActionHandler(e) {
-    const { action, property, selected } = e.detail;
-
+    const { action, property, selected, parent } = e.detail;
     switch (action) {
       case 'view': this._processViewAction(property, selected); break;
-      case 'edit': this._processEditAction(property, selected); break;
+      case 'edit': this._processEditAction(property, selected, parent); break;
       case 'delete': this._processDeleteAction(property, selected); break;
       default:
     }
@@ -272,26 +271,31 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  _processEditAction(property, selected) {
+  _processEditAction(property, selected, parent) {
     switch (property) {
       case 'module':
         this.moduleSelected = selected;
+        this.moduleSelectedParent = parent;
         this.moduleEditorOpened = true;
         break;
       case 'data-model':
         this.dataModelSelected = selected;
+        this.dataModelSelectedParent = parent;
         this.modelEditorOpened = true;
         break;
       case 'entity':
         this.entitySelected = selected;
+        this.entitySelectedParent = parent;
         this.entityEditorOpened = true;
         break;
       case 'attribute':
         this.attributeSelected = selected;
+        this.attributeSelectedParent = parent;
         this.attributeEditorOpened = true;
         break;
       case 'association':
         this.associationSelected = selected;
+        this.associationSelectedParent = parent;
         this.associationEditorOpened = true;
         break;
       default:
@@ -687,8 +691,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
     this.moduleEditorOpened = false;
     const changes = editor.changelog();
-    await this.store.patchModule(changes, moduleSelected);
+    await this.store.patchModule(changes, moduleSelected, this.moduleSelectedParent);
     this.moduleSelected = null;
+    this.moduleSelectedParent = null;
   }
 
   async _saveDataModelHandler(e) {
@@ -706,8 +711,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     if (!changes.length) {
       return;
     }
-    await this.store.patchModule(changes, dataModelSelected);
+    await this.store.patchModule(changes, dataModelSelected, this.dataModelSelectedParent);
     this.dataModelSelected = null;
+    this.dataModelSelectedParent = null;
   }
 
   async _saveEntityHandler(e) {
@@ -721,8 +727,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
     this.entityEditorOpened = false;
     const changes = editor.changelog();
-    await this.store.patchEntity(changes, entitySelected);
+    await this.store.patchEntity(changes, entitySelected, this.entitySelectedParent);
     this.entitySelected = null;
+    this.entitySelectedParent = null;
   }
 
   async _saveAttributeHandler(e) {
@@ -733,9 +740,10 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.attributeEditorOpened = false;
     const { type, changelog } = editor.changelog();
     if (type === 'properties') {
-      await this.store.patchAttribute(changelog, this.attributeSelected);
+      await this.store.patchAttribute(changelog, this.attributeSelected, this.attributeSelectedParent);
     }
     this.attributeSelected = null;
+    this.attributeSelectedParent = null;
   }
 
   async _saveAssociationHandler(e) {
@@ -746,9 +754,10 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.associationEditorOpened = false;
     const { type, changelog } = editor.changelog();
     if (type === 'properties') {
-      await this.store.patchAssociation(changelog, this.associationSelected);
+      await this.store.patchAssociation(changelog, this.associationSelected, this.associationSelectedParent);
     }
     this.associationSelected = null;
+    this.associationSelectedParent = null;
   }
 
   _projectDblclickHandler() {

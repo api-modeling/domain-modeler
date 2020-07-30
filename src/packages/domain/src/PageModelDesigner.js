@@ -18,6 +18,7 @@ import { computeDataModelEntities, computeExternalDataModelEntities } from '@api
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationCreateEvent} DomainStateAssociationCreateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationDeleteEvent} DomainStateAssociationDeleteEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationUpdateEvent} DomainStateAssociationUpdateEvent */
+/** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationDeleteEvent} DomainStateAssociationDeleteEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainNavigationEvent} DomainNavigationEvent */
 
 
@@ -38,6 +39,7 @@ const entityDeleteHandler = Symbol('entityDeleteHandler');
 const navigationHandler = Symbol('navigationHandler');
 const associationAddHandler = Symbol('associationAddHandler');
 const associationUpdateHandler = Symbol('associationUpdateHandler');
+const associationDeleteHandler = Symbol('associationDeleteHandler');
 const zoomValue = Symbol('zoomValue');
 const zoomHandler = Symbol('zoomHandler');
 const notifyZoom = Symbol('notifyZoom');
@@ -153,6 +155,7 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     this[navigationHandler] = this[navigationHandler].bind(this);
     this[associationAddHandler] = this[associationAddHandler].bind(this);
     this[associationUpdateHandler] = this[associationUpdateHandler].bind(this);
+    this[associationDeleteHandler] = this[associationDeleteHandler].bind(this);
   }
 
   connectedCallback() {
@@ -161,6 +164,7 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     window.addEventListener(ModelingEventTypes.State.Entity.deleted, this[entityDeleteHandler]);
     window.addEventListener(ModelingEventTypes.State.Association.created, this[associationAddHandler]);
     window.addEventListener(ModelingEventTypes.State.Association.updated, this[associationUpdateHandler]);
+    window.addEventListener(ModelingEventTypes.State.Association.deleted, this[associationDeleteHandler]);
     window.addEventListener(ModelingEventTypes.State.Navigation.change, this[navigationHandler]);
 
     const { dataModelId } = this;
@@ -175,6 +179,7 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     window.removeEventListener(ModelingEventTypes.State.Entity.deleted, this[entityDeleteHandler]);
     window.removeEventListener(ModelingEventTypes.State.Association.created, this[associationAddHandler]);
     window.removeEventListener(ModelingEventTypes.State.Association.updated, this[associationUpdateHandler]);
+    window.removeEventListener(ModelingEventTypes.State.Association.deleted, this[associationDeleteHandler]);
     window.removeEventListener(ModelingEventTypes.State.Navigation.change, this[navigationHandler]);
   }
 
@@ -299,8 +304,9 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
         id,
         target,
         source: entityId,
-        model: parent,
+        model: this.dataModelId,
       });
+      this.requestUpdate();
     }
   }
 
@@ -308,37 +314,51 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
    * @param {DomainStateAssociationUpdateEvent} e
    */
   async [associationUpdateHandler](e) {
-    const { id } = e.detail;
+    const { id, parent } = e.detail;
     const entities = /** @type EntityItem[] */ (this[entitiesValue] || []);
-    let entity;
-    let linkIndex;
-    for (let i = 0, len = entities.length; i < len; i++) {
-      const { links } = entities[i];
-      linkIndex = links.findIndex((link) => link.id === id);
-      if (linkIndex !== -1) {
-        entity = entities[i];
-        break;
-      }
-    }
-    if (!entity) {
+    const index = entities.findIndex((entity) => entity.entity === parent);
+    // the parent is not in this visualization
+    if (index === -1) {
       return;
     }
     const assoc = await ModelingEvents.Association.read(this, id);
     const target = this._getLinkValue(assoc, this.ns.aml.vocabularies.dataModel.target);
-    if (target) {
+    if (!target) {
+      // @todo(pawel): probably this should remove the edge if exists in the list of links.
       return;
     }
+    const { links } = entities[index];
+    const linkIndex = links.findIndex((link) => link.id === id);
     if (linkIndex === -1) {
-      entity.links.push({
+      links.push({
         id,
         target,
-        source: entity.entity,
+        source: parent,
         model: this.dataModelId,
       });
     } else {
-      entity.links[linkIndex].target = target;
+      const link = links[linkIndex];
+      link.target = target;
     }
     this.requestUpdate();
+  }
+
+  /**
+   * @param {DomainStateAssociationDeleteEvent} e
+   */
+  [associationDeleteHandler](e) {
+    const { id } = e.detail;
+    const entities = /** @type EntityItem[] */ (this[entitiesValue] || []);
+    for (let i = 0, len = entities.length; i < len; i++) {
+      const { links } = entities[i];
+      for (let j = 0, linksLen = links.length; j < linksLen; j++) {
+        if (links[j].id === id) {
+          links.splice(j, 1);
+          this.requestUpdate();
+          return;
+        }
+      }
+    }
   }
 
   /**
@@ -388,12 +408,14 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
     const {
       compatibility,
       zoom,
+      dataModelId,
     } = this;
     return html`
       <modeling-canvas
         class="canvas"
         ?compatibility="${compatibility}"
         .zoom="${zoom}"
+        .contextId="${dataModelId}"
         @zoomchange="${this[zoomHandler]}"
       >
         ${this[entitiesTemplate]()}
