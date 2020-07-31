@@ -51,6 +51,7 @@ nav {
 main {
   flex: 1;
   display: flex;
+  flex-direction: column;
   background: #E5E5E5;
   height: 100%;
   overflow: auto;

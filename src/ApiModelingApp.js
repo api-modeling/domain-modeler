@@ -26,6 +26,7 @@ import '@api-modeling/modeling-icons/modeling-icon.js';
 
 // pages
 import './packages/projects/page-project-picker.js';
+import './packages/projects/modeling-breadcrumbs.js';
 import './packages/storage/page-import-screen.js';
 import './packages/domain/page-model-designer.js';
 
@@ -39,6 +40,7 @@ import ModelingAlertDialog from './packages/helpers/modeling-alert-dialog.js';
 /* global MetaStore */
 
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateModuleCreateEvent} DomainStateModuleCreateEvent */
+/** @typedef {import('@api-modeling/modeling-events').Events.DomainNavigationEvent} DomainNavigationEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateModuleDeleteEvent} DomainStateModuleDeleteEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateModuleUpdateEvent} DomainStateModuleUpdateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateDataModelCreateEvent} DomainStateDataModelCreateEvent */
@@ -71,6 +73,59 @@ const associationAddHandler = Symbol('associationAddHandler');
 const zoomSelectionTemplate = Symbol('zoomSelectionTemplate');
 const canvasZoomHandler = Symbol('canvasZoomHandler');
 const zoomInputHandler = Symbol('zoomInputHandler');
+const saveAttributeHandler = Symbol('saveAttributeHandler');
+const saveEntityHandler = Symbol('saveEntityHandler');
+const saveDataModelHandler = Symbol('saveDataModelHandler');
+const saveModuleHandler = Symbol('saveModuleHandler');
+const editSelectedHandler = Symbol('editSelectedHandler');
+const deleteAssociationHandler = Symbol('deleteAssociationHandler');
+const saveAssociationHandler = Symbol('saveAssociationHandler');
+const deleteAttributeHandler = Symbol('deleteAttributeHandler');
+const closeDrawerHandler = Symbol('closeDrawerHandler');
+const drawerOpenedHandler = Symbol('drawerOpenedHandler');
+const projectNameInputHandler = Symbol('projectNameInputHandler');
+const mainMenuHandler = Symbol('mainMenuHandler');
+const fileImportHandler = Symbol('fileImportHandler');
+const saveProjectNameHandler = Symbol('saveProjectNameHandler');
+const deleteModuleHandler = Symbol('deleteModuleHandler');
+const projectDblclickHandler = Symbol('projectDblclickHandler');
+const deleteEntityHandler = Symbol('deleteEntityHandler');
+const deleteModelHandler = Symbol('deleteModelHandler');
+const projectSaveHandler = Symbol('projectSaveHandler');
+const restoreProjectHandler = Symbol('restoreProjectHandler');
+const importProjectHandler = Symbol('importProjectHandler');
+const newProjectRequestHandler = Symbol('newProjectRequestHandler');
+const selectDataModel = Symbol('selectDataModel');
+const selectModule = Symbol('selectModule');
+const selectEntity = Symbol('selectEntity');
+const processViewAction = Symbol('processViewAction');
+const processEditAction = Symbol('processEditAction');
+const processDeleteAction = Symbol('processDeleteAction');
+const deleteModule = Symbol('deleteModule');
+const deleteModel = Symbol('deleteModel');
+const deleteEntity = Symbol('deleteEntity');
+const deleteAttribute = Symbol('deleteAttribute');
+const deleteAssociation = Symbol('deleteAssociation');
+const navigateHandler = Symbol('navigateHandler');
+const navigationHandler = Symbol('navigationHandler');
+const modelingActionHandler = Symbol('modelingActionHandler');
+const headerTemplate = Symbol('headerTemplate');
+const projectCreateDialogTemplate = Symbol('projectCreateDialogTemplate');
+const navigationDrawerTemplate = Symbol('navigationDrawerTemplate');
+const renderPage = Symbol('renderPage');
+const moduleDetailsViewTemplate = Symbol('moduleDetailsViewTemplate');
+const moduleDetailsEditorTemplate = Symbol('moduleDetailsEditorTemplate');
+const modelDetailsViewTemplate = Symbol('modelDetailsViewTemplate');
+const modelDetailsEditorTemplate = Symbol('modelDetailsEditorTemplate');
+const entityDetailsViewTemplate = Symbol('entityDetailsViewTemplate');
+const entityDetailsEditorTemplate = Symbol('entityDetailsEditorTemplate');
+const attributeEditorTemplate = Symbol('attributeEditorTemplate');
+const associationEditorTemplate = Symbol('associationEditorTemplate');
+const projectNameEditorTemplate = Symbol('projectNameEditorTemplate');
+const projectNameHeaderTemplate = Symbol('projectNameHeaderTemplate');
+const mainDropdownTemplate = Symbol('mainDropdownTemplate');
+const importProcessingTemplate = Symbol('importProcessingTemplate');
+const breadcrumbsTemplate = Symbol('breadcrumbsTemplate');
 
 const zoomValues = ['25%', '33%', '50%', '100%', '150%', '200%', '300%', '400%'];
 // the 100% of the scale in the zoom dropdown represents this many zoom levels
@@ -175,10 +230,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.persistence = new StorePersistenceApi(this.store);
     this.persistence.listen();
 
-    this._navigateHandler = this._navigateHandler.bind(this);
-    this._navigationHandler = this._navigationHandler.bind(this);
-    this._modelingActionHandler = this._modelingActionHandler.bind(this);
-
+    this[navigateHandler] = this[navigateHandler].bind(this);
+    this[navigationHandler] = this[navigationHandler].bind(this);
+    this[modelingActionHandler] = this[modelingActionHandler].bind(this);
     this[moduleAddHandler] = this[moduleAddHandler].bind(this);
     this[moduleDeleteHandler] = this[moduleDeleteHandler].bind(this);
     this[moduleUpdateHandler] = this[moduleUpdateHandler].bind(this);
@@ -194,9 +248,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
   connectedCallback() {
     super.connectedCallback();
-    this.addEventListener('navigate', this._navigateHandler);
-    window.addEventListener(ModelingEventTypes.State.Navigation.change, this._navigationHandler);
-    window.addEventListener(ModelingEventTypes.State.Navigation.action, this._modelingActionHandler);
+    this.addEventListener('navigate', this[navigateHandler]);
+    window.addEventListener(ModelingEventTypes.State.Navigation.change, this[navigationHandler]);
+    window.addEventListener(ModelingEventTypes.State.Navigation.action, this[modelingActionHandler]);
 
     window.addEventListener(ModelingEventTypes.State.Module.created, this[moduleAddHandler]);
     window.addEventListener(ModelingEventTypes.State.Module.deleted, this[moduleDeleteHandler]);
@@ -218,7 +272,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     dialog.open();
   }
 
-  _navigateHandler(e) {
+  [navigateHandler](e) {
     const { route, params } = e.detail;
     this.route = route;
     this.params = params;
@@ -227,28 +281,33 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  _navigationHandler(e) {
+  /**
+   * @param {DomainNavigationEvent} e
+   */
+  [navigationHandler](e) {
     const { selected, type, parent } = e.detail;
     if (type === 'module') {
-      this._selectModule(selected);
+      this[selectModule](selected);
     } else if (type === 'data-model') {
-      this._selectDataModel(selected);
+      this[selectDataModel](selected);
     } else if (type === 'entity') {
-      this._selectEntity(selected, parent);
+      this[selectEntity](selected, parent);
+    } else if (type === 'project') {
+      this[selectModule]();
     }
   }
 
-  _modelingActionHandler(e) {
+  [modelingActionHandler](e) {
     const { action, property, selected, parent } = e.detail;
     switch (action) {
-      case 'view': this._processViewAction(property, selected); break;
-      case 'edit': this._processEditAction(property, selected, parent); break;
-      case 'delete': this._processDeleteAction(property, selected); break;
+      case 'view': this[processViewAction](property, selected); break;
+      case 'edit': this[processEditAction](property, selected, parent); break;
+      case 'delete': this[processDeleteAction](property, selected); break;
       default:
     }
   }
 
-  _processViewAction(property, selected) {
+  [processViewAction](property, selected) {
     switch (property) {
       case 'module':
         this.moduleSelected = selected;
@@ -271,7 +330,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  _processEditAction(property, selected, parent) {
+  [processEditAction](property, selected, parent) {
     switch (property) {
       case 'module':
         this.moduleSelected = selected;
@@ -302,13 +361,13 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  _processDeleteAction(property, selected) {
+  [processDeleteAction](property, selected) {
     switch (property) {
-      case 'module': this._deleteModule(selected); break;
-      case 'data-model': this._deleteModel(selected); break;
-      case 'entity': this._deleteEntity(selected); break;
-      case 'attribute': this._deleteAttribute(selected); break;
-      case 'association': this._deleteAssociation(selected); break;
+      case 'module': this[deleteModule](selected); break;
+      case 'data-model': this[deleteModel](selected); break;
+      case 'entity': this[deleteEntity](selected); break;
+      case 'attribute': this[deleteAttribute](selected); break;
+      case 'association': this[deleteAssociation](selected); break;
       default:
     }
   }
@@ -318,14 +377,15 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.attributeEditorOpened = false;
     this.modelEditorOpened = false;
     this.entityEditorOpened = false;
-
-    // this.entitySelected = null;
-    // this.dataModelSelected = null;
-    // this.attributeSelected = null;
-    // this.associationSelected = null;
   }
 
-  async _selectModule(id) {
+  /**
+   * Selects the module in the application and render UI for it.
+   *
+   * @param {string=} id The ID of the module. If not set then it request for the
+   * root module.
+   */
+  async [selectModule](id) {
     this.clearEditorSelectionState();
     const module = await this.store.getModule(id);
     this.module = module;
@@ -339,7 +399,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
    * @param {string=} parent Optional parent
    * @return {Promise<void>}
    */
-  async _selectEntity(id, parent) {
+  async [selectEntity](id, parent) {
     this.clearEditorSelectionState();
     this.route = 'model';
     this.entitySelected = id;
@@ -348,20 +408,20 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  async _selectDataModel(id) {
+  async [selectDataModel](id) {
     this.clearEditorSelectionState();
     this.route = 'model';
     this.dataModelSelected = id;
   }
 
-  async _deleteModule(id) {
+  async [deleteModule](id) {
     await this.store.removeModule(id);
     if (this.moduleId === id) {
       this.moduleId = this.rootModuleId;
     }
   }
 
-  async _deleteModel(id) {
+  async [deleteModel](id) {
     await this.store.removeDataModel(id);
     if (this.dataModelSelected === id) {
       this.dataModelSelected = undefined;
@@ -370,7 +430,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  async _deleteAttribute(id) {
+  async [deleteAttribute](id) {
     await this.store.removeAttribute(id);
     if (this.attributeSelected === id) {
       this.attributeSelected = undefined;
@@ -378,7 +438,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  async _deleteEntity(id) {
+  async [deleteEntity](id) {
     await this.store.removeEntity(id);
     if (this.entitySelected === id) {
       this.entitySelected = undefined;
@@ -387,7 +447,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  async _deleteAssociation(id) {
+  async [deleteAssociation](id) {
     await this.store.removeAssociation(id);
     if (this.associationSelected === id) {
       this.associationSelected = undefined;
@@ -557,6 +617,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   [entityAddHandler](e) {
     this.entityEditorOpened = true;
     this.entitySelected = e.detail.id;
+    this.entitySelectedParent = e.detail.parent;
   }
 
   /**
@@ -565,6 +626,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   [attributeAddHandler](e) {
     this.attributeEditorOpened = true;
     this.attributeSelected = e.detail.id;
+    this.attributeSelectedParent = e.detail.parent;
   }
 
   /**
@@ -573,24 +635,25 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   [associationAddHandler](e) {
     this.associationEditorOpened = true;
     this.associationSelected = e.detail.id;
+    this.associationSelectedParent = e.detail.parent;
   }
 
-  _newProjectRequestHandler() {
+  [newProjectRequestHandler]() {
     this.renderNameDialog = true;
   }
 
-  _importProjectHandler() {
+  [importProjectHandler]() {
     this.route = 'import';
   }
 
-  async _restoreProjectHandler(e) {
+  async [restoreProjectHandler](e) {
     const { id } = e.detail;
     const project = await this.persistence.restore(id);
     this.projectId = project['@id'];
     this.route = 'domain';
   }
 
-  async _projectSaveHandler() {
+  async [projectSaveHandler]() {
     const nameInput = /** @type AnypointInput */ (this.shadowRoot.querySelector('[name="project-name"]'));
     if (!nameInput.value) {
       return;
@@ -616,71 +679,71 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
   /**
    * @param {KeyboardEvent} e
    */
-  _projectNameInputHandler(e) {
+  [projectNameInputHandler](e) {
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
-      this._saveProjectNameHandler();
+      this[saveProjectNameHandler]();
     }
   }
 
-  _drawerOpenedHandler(e) {
+  [drawerOpenedHandler](e) {
     if (e.target.opened) {
       return;
     }
-    this._closeDrawerHandler(e);
+    this[closeDrawerHandler](e);
   }
 
-  _closeDrawerHandler(e) {
+  [closeDrawerHandler](e) {
     const prop = e.target.dataset.property;
     this[prop] = false;
   }
 
-  async _deleteModuleHandler(e) {
+  async [deleteModuleHandler](e) {
     const { moduleSelected } = this;
     if (!moduleSelected) {
       return;
     }
-    this._closeDrawerHandler(e);
+    this[closeDrawerHandler](e);
     await this.store.removeModule(moduleSelected);
     this.moduleSelected = null;
   }
 
-  async _deleteModelHandler(e) {
+  async [deleteModelHandler](e) {
     const { dataModelSelected } = this;
     if (!dataModelSelected) {
       return;
     }
-    this._closeDrawerHandler(e);
-    await this._deleteModel(dataModelSelected);
+    this[closeDrawerHandler](e);
+    await this[deleteModel](dataModelSelected);
   }
 
-  async _deleteEntityHandler(e) {
+  async [deleteEntityHandler](e) {
     const { entitySelected } = this;
     if (!entitySelected) {
       return;
     }
-    this._closeDrawerHandler(e);
+    this[closeDrawerHandler](e);
     await this.store.removeEntity(entitySelected);
     this.entitySelected = null;
   }
 
-  async _deleteAttributeHandler(e) {
-    this._closeDrawerHandler(e);
+  async [deleteAttributeHandler](e) {
+    this[closeDrawerHandler](e);
     await this.store.removeAttribute(this.attributeSelected);
     this.attributeSelected = null;
   }
 
-  async _deleteAssociationHandler(e) {
-    this._closeDrawerHandler(e);
-    await this._deleteAssociation(this.associationSelected);
+  async [deleteAssociationHandler](e) {
+    this[closeDrawerHandler](e);
+    await this[deleteAssociation](this.associationSelected);
   }
 
-  _editSelectedHandler(e) {
+  [editSelectedHandler](e) {
     const { property, editorProperty } = e.target.dataset;
     this[property] = false;
     this[editorProperty] = true;
   }
 
-  async _saveModuleHandler(e) {
+  async [saveModuleHandler](e) {
     const { moduleSelected } = this;
     if (!moduleSelected) {
       return;
@@ -696,7 +759,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.moduleSelectedParent = null;
   }
 
-  async _saveDataModelHandler(e) {
+  async [saveDataModelHandler](e) {
     const { dataModelSelected } = this;
     if (!dataModelSelected) {
       return;
@@ -716,7 +779,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     this.dataModelSelectedParent = null;
   }
 
-  async _saveEntityHandler(e) {
+  async [saveEntityHandler](e) {
     const { entitySelected } = this;
     if (!entitySelected) {
       return;
@@ -726,45 +789,56 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       return;
     }
     this.entityEditorOpened = false;
-    const changes = editor.changelog();
-    await this.store.patchEntity(changes, entitySelected, this.entitySelectedParent);
+    const { changelog, view } = editor.changelog();
+    if (changelog.length) {
+      await this.store.patchEntity(changelog, entitySelected, this.entitySelectedParent);
+    }
+    if (view) {
+      await this.store.storeViewModel(entitySelected, this.ns.aml.vocabularies.dataModel.Entity, view, this.entitySelectedParent);
+    }
     this.entitySelected = null;
     this.entitySelectedParent = null;
   }
 
-  async _saveAttributeHandler(e) {
+  async [saveAttributeHandler](e) {
     const editor = /** @type AttributeEditorElement */ (e.target.previousElementSibling.previousElementSibling);
     if (!editor.validate()) {
       return;
     }
     this.attributeEditorOpened = false;
-    const { type, changelog } = editor.changelog();
-    if (type === 'properties') {
+    const { view, changelog } = editor.changelog();
+    if (changelog.length) {
       await this.store.patchAttribute(changelog, this.attributeSelected, this.attributeSelectedParent);
+    }
+    if (view) {
+      await this.store.storeViewModel(this.attributeSelected, this.ns.aml.vocabularies.dataModel.AttributeProperty, view, this.attributeSelectedParent);
     }
     this.attributeSelected = null;
     this.attributeSelectedParent = null;
   }
 
-  async _saveAssociationHandler(e) {
+  async [saveAssociationHandler](e) {
     const editor = /** @type AssociationEditorElement */ (e.target.previousElementSibling.previousElementSibling);
     if (!editor.validate()) {
       return;
     }
     this.associationEditorOpened = false;
-    const { type, changelog } = editor.changelog();
-    if (type === 'properties') {
+    const { view, changelog } = editor.changelog();
+    if (changelog.length) {
       await this.store.patchAssociation(changelog, this.associationSelected, this.associationSelectedParent);
+    }
+    if (view) {
+      await this.store.storeViewModel(this.associationSelected, this.ns.aml.vocabularies.dataModel.AssociationProperty, view, this.associationSelectedParent);
     }
     this.associationSelected = null;
     this.associationSelectedParent = null;
   }
 
-  _projectDblclickHandler() {
+  [projectDblclickHandler]() {
     this.projectNameEditor = true;
   }
 
-  async _saveProjectNameHandler() {
+  async [saveProjectNameHandler]() {
     const input = /** @type AnypointInput */ (this.shadowRoot.querySelector('.new-name-input'));
     if (!input.value) {
       return;
@@ -781,7 +855,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     await this.persistence.storeState();
   }
 
-  async _fileImportHandler(e) {
+  async [fileImportHandler](e) {
     const { type, content } = e.detail;
     this.route = 'importprocessing';
     const factory = new DomainImporter(this.store);
@@ -800,7 +874,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     }
   }
 
-  _mainMenuHandler(e) {
+  [mainMenuHandler](e) {
     const { item } = e.detail;
     if (!item) {
       // cancelled selection
@@ -882,27 +956,28 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
 
   render() {
     return html`
-    ${this._headerTemplate()}
+    ${this[headerTemplate]()}
     <storage-prompt></storage-prompt>
     <div class="content">
-      ${this._navigationDrawerTemplate()}
+      ${this[navigationDrawerTemplate]()}
       <main>
-        ${this._renderPage()}
+        ${this[breadcrumbsTemplate]()}
+        ${this[renderPage]()}
       </main>
     </div>
-    ${this._projectCreateDialogTemplate()}
-    ${this._moduleDetailsViewTemplate()}
-    ${this._moduleDetailsEditorTemplate()}
-    ${this._modelDetailsViewTemplate()}
-    ${this._modelDetailsEditorTemplate()}
-    ${this._entityDetailsViewTemplate()}
-    ${this._entityDetailsEditorTemplate()}
-    ${this._attributeEditorTemplate()}
-    ${this._associationEditorTemplate()}
+    ${this[projectCreateDialogTemplate]()}
+    ${this[moduleDetailsViewTemplate]()}
+    ${this[moduleDetailsEditorTemplate]()}
+    ${this[modelDetailsViewTemplate]()}
+    ${this[modelDetailsEditorTemplate]()}
+    ${this[entityDetailsViewTemplate]()}
+    ${this[entityDetailsEditorTemplate]()}
+    ${this[attributeEditorTemplate]()}
+    ${this[associationEditorTemplate]()}
     `;
   }
 
-  _projectCreateDialogTemplate() {
+  [projectCreateDialogTemplate]() {
     const { compatibility, renderNameDialog } = this;
     if (!renderNameDialog) {
       return '';
@@ -931,12 +1006,12 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       </div>
       <div class="buttons">
         <anypoint-button dialog-dismiss>Cancel</anypoint-button>
-        <anypoint-button dialog-confirm autofocus @click="${this._projectSaveHandler}">Save</anypoint-button>
+        <anypoint-button dialog-confirm autofocus @click="${this[projectSaveHandler]}">Save</anypoint-button>
       </div>
     </anypoint-dialog>`;
   }
 
-  _renderPage() {
+  [renderPage]() {
     switch (this.route) {
       case 'start':
         return html`
@@ -944,9 +1019,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
             class="page"
             .store="${this.store}"
             .persistence="${this.persistence}"
-            @newprojectrequested="${this._newProjectRequestHandler}"
-            @importrequested="${this._importProjectHandler}"
-            @restore="${this._restoreProjectHandler}"></page-project-picker>
+            @newprojectrequested="${this[newProjectRequestHandler]}"
+            @importrequested="${this[importProjectHandler]}"
+            @restore="${this[restoreProjectHandler]}"></page-project-picker>
         `;
       case 'domain':
         return html`
@@ -967,13 +1042,13 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       case 'import':
         return html`<page-import-screen
           class="page-padding full-page"
-          @importprocessresult="${this._fileImportHandler}"></page-import-screen>`;
-      case 'importprocessing': return this.importProcessingTemplate();
+          @importprocessresult="${this[fileImportHandler]}"></page-import-screen>`;
+      case 'importprocessing': return this[importProcessingTemplate]();
       default: return html`Not found`;
     }
   }
 
-  _headerTemplate() {
+  [headerTemplate]() {
     const { route } = this;
     if (['domain', 'model'].indexOf(route) === -1) {
       return '';
@@ -981,15 +1056,15 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const { projectNameEditor } = this;
     return html`
     <header>
-      ${projectNameEditor ? this._projectNameEditorTemplate() : this._projectNameHeaderTemplate()}
+      ${projectNameEditor ? this[projectNameEditorTemplate]() : this[projectNameHeaderTemplate]()}
       <span class="spacer"></span>
       ${this[zoomSelectionTemplate]()}
-      ${this._mainDropdownTemplate()}
+      ${this[mainDropdownTemplate]()}
     </header>`;
   }
 
-  _mainDropdownTemplate() {
-    return html`<anypoint-menu-button horizontalAlign="right" horizontalOffset="12" closeOnActivate @select="${this._mainMenuHandler}">
+  [mainDropdownTemplate]() {
+    return html`<anypoint-menu-button horizontalAlign="right" horizontalOffset="12" closeOnActivate @select="${this[mainMenuHandler]}">
       <anypoint-icon-button
         slot="dropdown-trigger"
         aria-label="activate for project menu"
@@ -1010,23 +1085,23 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     </anypoint-menu-button>`;
   }
 
-  _projectNameHeaderTemplate() {
+  [projectNameHeaderTemplate]() {
     const { projectName } = this;
-    return html`<h2 class="project-name" @click="${this._projectDblclickHandler}">${projectName}</h2>`;
+    return html`<h2 class="project-name" @click="${this[projectDblclickHandler]}">${projectName}</h2>`;
   }
 
-  _projectNameEditorTemplate() {
+  [projectNameEditorTemplate]() {
     const { projectName } = this;
     return html`
     <div class="name-editor">
-      <anypoint-input .value="${projectName}" nolabelfloat outlined class="new-name-input" @keydown="${this._projectNameInputHandler}">
+      <anypoint-input .value="${projectName}" nolabelfloat outlined class="new-name-input" @keydown="${this[projectNameInputHandler]}">
         <label slot="label">Project name</label>
       </anypoint-input>
-      <anypoint-button emphasis="high" @click="${this._saveProjectNameHandler}">Save</anypoint-button>
+      <anypoint-button emphasis="high" @click="${this[saveProjectNameHandler]}">Save</anypoint-button>
     </div>`;
   }
 
-  _navigationDrawerTemplate() {
+  [navigationDrawerTemplate]() {
     const { route } = this;
     if (['domain', 'model'].indexOf(route) === -1) {
       return '';
@@ -1046,7 +1121,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     </nav>`;
   }
 
-  _moduleDetailsViewTemplate() {
+  [moduleDetailsViewTemplate]() {
     const {
       compatibility,
       moduleDetailsOpened,
@@ -1055,7 +1130,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const opened = !!moduleSelected && moduleDetailsOpened;
     return html`<editor-drawer
       ?opened="${opened}"
-      @openedchange="${this._drawerOpenedHandler}"
+      @openedchange="${this[drawerOpenedHandler]}"
       data-property="moduleDetailsOpened"
       >
       <h5 slot="title">Module details</h5>
@@ -1066,25 +1141,25 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></module-details-view>
       <anypoint-button
         data-property="moduleDetailsOpened"
-        @click="${this._deleteModuleHandler}"
+        @click="${this[deleteModuleHandler]}"
         slot="action"
       >Delete</anypoint-button>
       <div class="flex-last" slot="action">
         <anypoint-button
-          @click="${this._closeDrawerHandler}"
+          @click="${this[closeDrawerHandler]}"
           data-property="moduleDetailsOpened"
         >Close</anypoint-button>
         <anypoint-button
           emphasis="high"
           data-property="moduleDetailsOpened"
           data-editor-property="moduleEditorOpened"
-          @click="${this._editSelectedHandler}"
+          @click="${this[editSelectedHandler]}"
         >Edit</anypoint-button>
       </div>
     </editor-drawer>`;
   }
 
-  _moduleDetailsEditorTemplate() {
+  [moduleDetailsEditorTemplate]() {
     const {
       compatibility,
       moduleEditorOpened,
@@ -1093,7 +1168,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const opened = !!moduleSelected && !!moduleEditorOpened;
     return html`<editor-drawer
       .opened="${opened}"
-      @openedchange="${this._drawerOpenedHandler}"
+      @openedchange="${this[drawerOpenedHandler]}"
       data-property="moduleEditorOpened"
     >
       <h5 slot="title">Edit module details</h5>
@@ -1104,19 +1179,19 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></module-details-editor>
       <anypoint-button
         data-property="moduleEditorOpened"
-        @click="${this._deleteModuleHandler}"
+        @click="${this[deleteModuleHandler]}"
         slot="action"
       >Delete</anypoint-button>
       <anypoint-button
         slot="action"
         class="flex-last"
         emphasis="high"
-        @click="${this._saveModuleHandler}"
+        @click="${this[saveModuleHandler]}"
       >Save</anypoint-button>
     </editor-drawer>`;
   }
 
-  _modelDetailsViewTemplate() {
+  [modelDetailsViewTemplate]() {
     const {
       compatibility,
       modelDetailsOpened,
@@ -1125,7 +1200,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const opened = !!dataModelSelected && modelDetailsOpened;
     return html`<editor-drawer
       ?opened="${opened}"
-      @openedchange="${this._drawerOpenedHandler}"
+      @openedchange="${this[drawerOpenedHandler]}"
       data-property="modelDetailsOpened"
       >
       <h5 slot="title">Data model details</h5>
@@ -1136,25 +1211,25 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></model-details-view>
       <anypoint-button
         data-property="modelDetailsOpened"
-        @click="${this._deleteModelHandler}"
+        @click="${this[deleteModelHandler]}"
         slot="action"
       >Delete</anypoint-button>
       <div class="flex-last" slot="action">
         <anypoint-button
-          @click="${this._closeDrawerHandler}"
+          @click="${this[closeDrawerHandler]}"
           data-property="modelDetailsOpened"
         >Close</anypoint-button>
         <anypoint-button
           emphasis="high"
           data-property="modelDetailsOpened"
           data-editor-property="modelEditorOpened"
-          @click="${this._editSelectedHandler}"
+          @click="${this[editSelectedHandler]}"
         >Edit</anypoint-button>
       </div>
     </editor-drawer>`;
   }
 
-  _modelDetailsEditorTemplate() {
+  [modelDetailsEditorTemplate]() {
     const {
       compatibility,
       modelEditorOpened,
@@ -1163,7 +1238,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const opened = !!dataModelSelected && !!modelEditorOpened;
     return html`<editor-drawer
       .opened="${opened}"
-      @openedchange="${this._drawerOpenedHandler}"
+      @openedchange="${this[drawerOpenedHandler]}"
       data-property="modelEditorOpened"
     >
       <h5 slot="title">Edit data model</h5>
@@ -1174,19 +1249,19 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></model-details-editor>
       <anypoint-button
         data-property="modelEditorOpened"
-        @click="${this._deleteModelHandler}"
+        @click="${this[deleteModelHandler]}"
         slot="action"
       >Delete</anypoint-button>
       <anypoint-button
         slot="action"
         class="flex-last"
         emphasis="high"
-        @click="${this._saveDataModelHandler}"
+        @click="${this[saveDataModelHandler]}"
       >Save</anypoint-button>
     </editor-drawer>`;
   }
 
-  _entityDetailsViewTemplate() {
+  [entityDetailsViewTemplate]() {
     const {
       compatibility,
       entityDetailsOpened,
@@ -1195,7 +1270,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const opened = !!entitySelected && entityDetailsOpened;
     return html`<editor-drawer
       ?opened="${opened}"
-      @openedchange="${this._drawerOpenedHandler}"
+      @openedchange="${this[drawerOpenedHandler]}"
       data-property="entityDetailsOpened"
       >
       <h5 slot="title">Entity details</h5>
@@ -1206,25 +1281,25 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></entity-details-view>
       <anypoint-button
         data-property="entityDetailsOpened"
-        @click="${this._deleteEntityHandler}"
+        @click="${this[deleteEntityHandler]}"
         slot="action"
       >Delete</anypoint-button>
       <div class="flex-last" slot="action">
         <anypoint-button
-          @click="${this._closeDrawerHandler}"
+          @click="${this[closeDrawerHandler]}"
           data-property="entityDetailsOpened"
         >Close</anypoint-button>
         <anypoint-button
           emphasis="high"
           data-property="entityDetailsOpened"
           data-editor-property="entityEditorOpened"
-          @click="${this._editSelectedHandler}"
+          @click="${this[editSelectedHandler]}"
         >Edit</anypoint-button>
       </div>
     </editor-drawer>`;
   }
 
-  _entityDetailsEditorTemplate() {
+  [entityDetailsEditorTemplate]() {
     const {
       compatibility,
       entityEditorOpened,
@@ -1233,7 +1308,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const opened = !!entitySelected && !!entityEditorOpened;
     return html`<editor-drawer
       .opened="${opened}"
-      @openedchange="${this._drawerOpenedHandler}"
+      @openedchange="${this[drawerOpenedHandler]}"
       data-property="entityEditorOpened"
     >
       <h5 slot="title">Edit entity details</h5>
@@ -1243,19 +1318,19 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></entity-editor>
       <anypoint-button
         data-property="entityEditorOpened"
-        @click="${this._deleteEntityHandler}"
+        @click="${this[deleteEntityHandler]}"
         slot="action"
       >Delete</anypoint-button>
       <anypoint-button
         slot="action"
         class="flex-last"
         emphasis="high"
-        @click="${this._saveEntityHandler}"
+        @click="${this[saveEntityHandler]}"
       >Save</anypoint-button>
     </editor-drawer>`;
   }
 
-  importProcessingTemplate() {
+  [importProcessingTemplate]() {
     return html`
     <div class="title-line">
       <h2>Processing files</h2>
@@ -1264,7 +1339,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     `;
   }
 
-  _attributeEditorTemplate() {
+  [attributeEditorTemplate]() {
     const {
       compatibility,
       attributeEditorOpened,
@@ -1273,7 +1348,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const opened = !!attributeSelected && !!attributeEditorOpened;
     return html`<editor-drawer
       .opened="${opened}"
-      @openedchange="${this._drawerOpenedHandler}"
+      @openedchange="${this[drawerOpenedHandler]}"
       data-property="attributeEditorOpened"
     >
       <h5 slot="title">Edit attribute</h5>
@@ -1284,19 +1359,19 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></attribute-editor>
       <anypoint-button
         data-property="attributeEditorOpened"
-        @click="${this._deleteAttributeHandler}"
+        @click="${this[deleteAttributeHandler]}"
         slot="action"
       >Delete</anypoint-button>
       <anypoint-button
         slot="action"
         class="flex-last"
         emphasis="high"
-        @click="${this._saveAttributeHandler}"
+        @click="${this[saveAttributeHandler]}"
       >Save</anypoint-button>
     </editor-drawer>`;
   }
 
-  _associationEditorTemplate() {
+  [associationEditorTemplate]() {
     const {
       compatibility,
       associationEditorOpened,
@@ -1305,7 +1380,7 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
     const opened = !!associationSelected && !!associationEditorOpened;
     return html`<editor-drawer
       .opened="${opened}"
-      @openedchange="${this._drawerOpenedHandler}"
+      @openedchange="${this[drawerOpenedHandler]}"
       data-property="associationEditorOpened"
     >
       <h5 slot="title">Edit association</h5>
@@ -1316,14 +1391,14 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       ></association-editor>
       <anypoint-button
         data-property="associationEditorOpened"
-        @click="${this._deleteAssociationHandler}"
+        @click="${this[deleteAssociationHandler]}"
         slot="action"
       >Delete</anypoint-button>
       <anypoint-button
         slot="action"
         class="flex-last"
         emphasis="high"
-        @click="${this._saveAssociationHandler}"
+        @click="${this[saveAssociationHandler]}"
       >Save</anypoint-button>
     </editor-drawer>`;
   }
@@ -1349,5 +1424,9 @@ export class ApiModelingApp extends ModuleMixin(LitElement) {
       </anypoint-listbox>
     </anypoint-input-combobox>
     `;
+  }
+
+  [breadcrumbsTemplate]() {
+    return html`<modeling-breadcrumbs ?compatibility="${this.compatibility}"></modeling-breadcrumbs>`;
   }
 }

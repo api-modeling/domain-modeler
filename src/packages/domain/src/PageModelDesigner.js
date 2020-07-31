@@ -18,7 +18,6 @@ import { computeDataModelEntities, computeExternalDataModelEntities } from '@api
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationCreateEvent} DomainStateAssociationCreateEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationDeleteEvent} DomainStateAssociationDeleteEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationUpdateEvent} DomainStateAssociationUpdateEvent */
-/** @typedef {import('@api-modeling/modeling-events').Events.DomainStateAssociationDeleteEvent} DomainStateAssociationDeleteEvent */
 /** @typedef {import('@api-modeling/modeling-events').Events.DomainNavigationEvent} DomainNavigationEvent */
 
 
@@ -306,6 +305,9 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
         source: entityId,
         model: this.dataModelId,
       });
+      const exEntities = computeExternalDataModelEntities(entities);
+      this[entitiesValue] = entities;
+      this[externalEntitiesValue] = exEntities;
       this.requestUpdate();
     }
   }
@@ -340,6 +342,9 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
       const link = links[linkIndex];
       link.target = target;
     }
+    const exEntities = computeExternalDataModelEntities(entities);
+    this[entitiesValue] = entities;
+    this[externalEntitiesValue] = exEntities;
     this.requestUpdate();
   }
 
@@ -354,6 +359,9 @@ export class PageModelDesigner extends AttributeMixin(EntityMixin(LitElement)) {
       for (let j = 0, linksLen = links.length; j < linksLen; j++) {
         if (links[j].id === id) {
           links.splice(j, 1);
+          const exEntities = computeExternalDataModelEntities(entities);
+          this[entitiesValue] = entities;
+          this[externalEntitiesValue] = exEntities;
           this.requestUpdate();
           return;
         }
